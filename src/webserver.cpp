@@ -167,16 +167,7 @@ void handleRoot()
 
     // Sekcja Akcji
     html += F("<div class='section'><h2>Akcje</h2>");
-    html += F("<div style='display:flex; flex-wrap:wrap; gap:10px;'>");
-    if (isSessionActive)
-    {
-        html += F("<a href='/reset' onclick=\"return confirm('Czy na pewno chcesz zresetować router?')\"><button style='background-color:#ff6b6b;'>Reset routera</button></a>");
-        html += F("<a href='/reboot' onclick=\"return confirm('Czy na pewno chcesz zrestartować urządzenie (ESP)?')\"><button style='background-color:#dc3545;'>Restart urządzenia (ESP)</button></a>");
-    }
-    else
-    {
-        html += F("<span style='padding:8px; color:#666;'>Zaloguj się w konfiguracji, aby wykonać reset.</span>");
-    }
+    html += F("<div style='display:flex; justify-content:center; gap:12px;'>");
     html += F("<a href='/config'><button>Konfiguracja</button></a>");
     html += F("<a href='/'><button style='background-color:#6c757d;'>Odśwież</button></a>");
     html += F("</div></div>");
@@ -419,19 +410,19 @@ void handleConfig()
     <div class="container">
         <h1>Konfiguracja Strażnika Internetu</h1>
         <form id="configForm" action="/saveconfig" method="POST">
-        <div style="display:flex; justify-content:flex-end; align-items:center; gap:20px; margin-bottom:15px;">
-            <div class="switch-wrap">
-                <label>Jednostki: <select id="globalUnit" onchange="setGlobalUnit(this.value)" style="margin-left:5px; padding:4px;"><option value="1">ms</option><option value="1000" selected>s</option><option value="60000">min</option></select></label>
-            </div>
-            <div class="switch-wrap">
-                <span>Tryb ciemny</span>
-                <label class="switch">
-                    <input type="checkbox" id="themeSwitch" name="darkMode" onchange="toggleTheme(this.checked)")rawliteral");
+        <div style="display:flex; justify-content:flex-end; margin-bottom:15px;">
+            <div class="switch-wrap" style="flex-direction:column; align-items:flex-end; gap:6px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span>Tryb ciemny</span>
+                    <label class="switch">
+                        <input type="checkbox" id="themeSwitch" name="darkMode" onchange="toggleTheme(this.checked)")rawliteral");
     if (config.darkMode)
         html += F(R"rawliteral( checked)rawliteral");
     html += F(R"rawliteral(>
-                    <span class="slider"></span>
-                </label>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <label style="font-size:0.95em;">Jednostki globalne: <select id="globalUnit" onchange="setGlobalUnit(this.value)" style="margin-left:5px; padding:4px;"><option value="1">ms</option><option value="1000" selected>s</option><option value="60000">min</option></select></label>
             </div>
         </div>
 
@@ -794,7 +785,7 @@ void handleConfig()
     // --- Watchdog Control ---
     html += F(R"rawliteral(
         <details class="section accordion">
-            <summary><h2>🛡️ Kontrola Watchdog (Monitorowanie)</h2></summary>
+            <summary><h2>🛡️ Kontrola Strażnika (Monitorowanie)</h2></summary>
             <div class="accordion-content">
                 <div style="background:#1a3a1a; color:#a8f5a8; padding:12px; border-radius:6px; margin-bottom:15px; border:1px solid #4ade80;">
                     <b>⚠️ OSTRZEŻENIE - Dezaktywacja Watchdog:</b><br>
@@ -815,7 +806,7 @@ void handleConfig()
     // --- Tryb pracy ---
     html += F(R"rawliteral(
         <details class="section accordion">
-            <summary><h2>Tryb pracy</h2></summary>
+            <summary><h2>⚙️ Tryb pracy</h2></summary>
             <div class="accordion-content">
                 <div style="background:#3a2f0f; color:#f8e7a1; padding:12px; border-radius:6px; margin-bottom:15px; border:1px solid #c59f2b;">
                     <b>⚠️ WAŻNE - Tryb przerywany:</b><br>
@@ -876,7 +867,7 @@ void handleConfig()
         </details>
 
         <details class="section accordion">
-            <summary><h2>Sieci WiFi</h2></summary>
+            <summary><h2>📶 Sieci WiFi</h2></summary>
             <div class="accordion-content">
                 <label for="ssid">Nazwa sieci (SSID):</label>
                 <input type="text" id="ssid" name="ssid" placeholder="Wprowadź SSID sieci WiFi">
@@ -932,7 +923,7 @@ void handleConfig()
         </details>
 
         <details class="section accordion">
-            <summary><h2>Zabezpieczenia (Panel i OTA)</h2></summary>
+            <summary><h2>🔒 Zabezpieczenia (Panel i OTA)</h2></summary>
             <div class="accordion-content">
                 <label for="adminUser">Login administratora: <span class="tooltip">?<span class="tooltiptext">Nazwa użytkownika do logowania w panelu.</span></span></label>
                 <input type="text" id="adminUser" name="adminUser" value=")rawliteral");
