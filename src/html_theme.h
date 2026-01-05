@@ -31,17 +31,22 @@ body{
   color:var(--fg);
   transition:background 0.3s,color 0.3s;
 }
+@keyframes pulse{
+  0%{box-shadow:0 2px 8px rgba(40,167,69,0.3);}
+  50%{box-shadow:0 4px 20px rgba(40,167,69,0.8);}
+  100%{box-shadow:0 2px 8px rgba(40,167,69,0.3);}
+}
 )rawliteral";
 
 // Generuje inline script ustawiający motyw na podstawie config.darkMode
 inline String getThemeScript(bool darkMode)
 {
-    String script = F("<script>");
-    script += F("document.documentElement.setAttribute('data-theme','");
-    script += (darkMode ? "dark" : "light");
-    script += F("');");
-    script += F("</script>");
-    return script;
+  String script = F("<script>");
+  script += F("document.documentElement.setAttribute('data-theme','");
+  script += (darkMode ? "dark" : "light");
+  script += F("');");
+  script += F("</script>");
+  return script;
 }
 
 #endif

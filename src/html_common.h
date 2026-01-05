@@ -266,6 +266,39 @@ input:checked + .slider:before {
     padding: 15px;
     background-color: var(--card);
 }
+.tab-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0 16px;
+}
+.tab-button {
+    flex: 1 1 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--brd);
+    background: var(--inp);
+    color: var(--fg);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.tab-button:hover {
+    border-color: var(--btn);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+.tab-button.active {
+    background: var(--btn);
+    border-color: var(--btn);
+    color: white;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+}
+.tab-panel {
+    margin-bottom: 14px;
+}
 .box {
     border: 1px solid #ccc;
     padding: 20px;

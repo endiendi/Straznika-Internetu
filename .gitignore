@@ -51,6 +51,8 @@ src/RAPORT_ZGODNOSC_PANEL.md
 src/Scenariusze strażnik internetu.md
 src/DIAGNOSTYKA_I_TESTY.md
 src/ANALIZA_POZOSTALOSCI_EMAIL.md
+src/analiza_problemu_z_zakładkami.md
+src/webserver.cpp.bak
 INSTRUKCJE_NAPRAWCZE_STOPKA.md
 REFACTORING.md
 REFACTORING_2026-01-03.md

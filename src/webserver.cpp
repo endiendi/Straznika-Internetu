@@ -13,17 +13,121 @@
 #include "html_common.h" // Zunifikowany system HTML/CSS/JS
 #include "diag.h"
 #include "version.h"
-void handleFactoryReset();   // Deklaracja funkcji
-void handleReboot();         // Deklaracja funkcji
-void handleSaveBrightness(); // Deklaracja funkcji - zapisuje jasność do Flash
-void handleSimPingFail();    // Deklaracja funkcji symulacji awarii ping
-void handleLoginPage();      // Formularz logowania
-void handleLoginSubmit();    // Weryfikacja logowania
-void handleDownloadLogs();   // Pobranie pliku logów
+#include "config_validation.h" // Walidacja konfiguracji
+#include "html_form_helpers.h" // Helpery do generowania formantów HTML
+void handleFactoryReset();     // Deklaracja funkcji
+void handleReboot();           // Deklaracja funkcji
+void handleSaveBrightness();   // Deklaracja funkcji - zapisuje jasność do Flash
+void handleSimPingFail();      // Deklaracja funkcji symulacji awarii ping
+void handleLoginPage();        // Formularz logowania
+void handleLoginSubmit();      // Weryfikacja logowania
+void handleDownloadLogs();     // Pobranie pliku logów
 
 // Pozostałe funkcje i zmienne (tablica, uaktualnijTablicePlik itp.) są dostępne dzięki #include "WiFiConfig.h"
 
 ESP8266WebServer server(80);
+
+// ============================================================================
+// FUNKCJE POMOCNICZE DO PARSOWANIA I WALIDACJI KONFIGURACJI
+// ============================================================================
+
+/// Parsuje parametry konfiguracji z żądania POST
+/// Zwraca false jeśli walidacja nie powiedzie się i wysyła błąd
+bool parseAndValidateConfigParams(ESP8266WebServer &srv, Config &cfg)
+{
+    // Parsowanie parametrów numerycznych
+    cfg.pingInterval = srv.arg("pingInterval").toInt();
+    cfg.failLimit = srv.arg("failLimit").toInt();
+    cfg.providerFailureLimit = srv.arg("providerFailureLimit").toInt();
+    cfg.autoResetCountersHours = srv.arg("autoResetCountersHours").toInt();
+    cfg.maxPingMs = srv.arg("maxPingMs").toInt();
+    cfg.lagRetries = srv.arg("lagRetries").toInt();
+    cfg.routerOffTime = srv.arg("routerOffTime").toInt();
+    cfg.baseBootTime = srv.arg("baseBootTime").toInt();
+    cfg.bootLoopWindowSeconds = srv.arg("bootLoopWindowSeconds").toInt();
+    cfg.noWiFiTimeout = srv.arg("noWiFiTimeout").toInt();
+    cfg.apConfigTimeout = srv.arg("apConfigTimeout").toInt();
+    cfg.apMaxAttempts = srv.arg("apMaxAttempts").toInt();
+    cfg.apBackoffMs = srv.arg("apBackoffMs").toInt();
+    cfg.dhcpTimeoutMs = srv.arg("dhcpTimeoutMs").toInt();
+    cfg.awakeWindowMs = srv.arg("awakeWindowMs").toInt();
+    cfg.sleepWindowMs = srv.arg("sleepWindowMs").toInt();
+    cfg.ledBrightness = constrain(srv.arg("ledBrightness").toInt(), 0, 255);
+
+    // Parsowanie checkboxów
+    cfg.scheduledResetsEnabled = srv.hasArg("scheduledResetsEnabled");
+    cfg.watchdogEnabled = srv.hasArg("watchdogEnabled");
+    cfg.noWiFiBackoff = srv.hasArg("noWiFiBackoff");
+    cfg.darkMode = srv.hasArg("darkMode");
+    cfg.useGatewayOverride = srv.hasArg("useGatewayOverride");
+    cfg.enableBackupNetwork = srv.hasArg("enableBackupNetwork");
+
+    // Parsowanie trybu pracy
+    cfg.intermittentMode = (srv.arg("workMode") == "intermittent");
+
+    // Parsowanie adresów IP i haseł
+    cfg.host1 = srv.arg("host1");
+    cfg.host2 = srv.arg("host2");
+    cfg.gatewayOverride = srv.arg("gatewayOverride");
+    cfg.adminUser = srv.arg("adminUser");
+    cfg.adminPass = srv.arg("adminPass");
+
+    // Parsowanie sieci rezerwowej
+    cfg.backupNetworkFailLimit = constrain(srv.arg("backupNetworkFailLimit").toInt(), 1, 10);
+    cfg.backupNetworkRetryInterval = srv.arg("backupNetworkRetryInterval").toInt();
+    if (cfg.backupNetworkRetryInterval <= 0)
+        cfg.backupNetworkRetryInterval = 600000; // Default 10 min
+    cfg.pinRelayBackup = srv.arg("pinRelayBackup").toInt();
+
+    // Parsowanie zaplanowanych czasów resetów
+    for (int i = 0; i < 5; i++)
+    {
+        String argName = "resetTime" + String(i);
+        if (srv.hasArg(argName))
+        {
+            String timeStr = srv.arg(argName);
+            // Walidacja formatu HH:MM
+            if (timeStr.length() == 5 && timeStr[2] == ':')
+            {
+                cfg.scheduledResetTimes[i] = timeStr;
+            }
+            else
+            {
+                cfg.scheduledResetTimes[i] = "";
+            }
+        }
+        else
+        {
+            cfg.scheduledResetTimes[i] = "";
+        }
+    }
+
+    Serial.print("[WEBSERVER] Parsed config - ledBrightness=");
+    Serial.print(cfg.ledBrightness);
+    Serial.print(", darkMode=");
+    Serial.print(cfg.darkMode);
+    Serial.print(", pingInterval=");
+    Serial.println(cfg.pingInterval);
+
+    // Walidacja wszystkich parametrów
+    String validationError = validateAllConfigParams(
+        cfg.pingInterval, cfg.failLimit, cfg.providerFailureLimit,
+        cfg.autoResetCountersHours, cfg.maxPingMs, cfg.lagRetries,
+        cfg.bootLoopWindowSeconds, cfg.apMaxAttempts, cfg.routerOffTime,
+        cfg.baseBootTime, cfg.noWiFiTimeout, cfg.intermittentMode,
+        cfg.awakeWindowMs, cfg.sleepWindowMs, cfg.host1, cfg.host2,
+        cfg.gatewayOverride, cfg.useGatewayOverride, cfg.adminUser,
+        cfg.adminPass, cfg.maxTotalResetsEver);
+
+    if (validationError.length() > 0)
+    {
+        sendErrorPage(srv, "❌ Błąd walidacji", validationError.c_str(), "/config",
+                      "Powrót do konfiguracji", cfg.darkMode);
+        return false;
+    }
+
+    return true;
+}
 
 void setupWebServer()
 {
@@ -247,9 +351,7 @@ void handleManualReset()
 void handleClearLogs()
 {
     if (!checkAuth())
-    {
         return;
-    }
     File file = LittleFS.open(LOG_FILE, "w");
     if (file)
         file.close(); // Otwarcie w trybie "w" czyści plik
@@ -259,9 +361,7 @@ void handleClearLogs()
 void handleDownloadLogs()
 {
     if (!checkAuth())
-    {
         return;
-    }
     File file = LittleFS.open(LOG_FILE, "r");
     if (!file)
     {
@@ -288,17 +388,13 @@ void handleLogout()
     DIAG_PRINTLN(F("\n========== handleLogout START =========="));
     DIAG_PRINT(F("[LOGOUT] Session Active BEFORE logout: "));
     DIAG_PRINTLN(isSessionActive ? "TRUE" : "FALSE");
-    DIAG_PRINT(F("[LOGOUT] Old session token: "));
-    DIAG_PRINTLN(sessionToken);
 
-    // Zniszcz sesję na serwerze
     isSessionActive = false;
     lastSessionActivity = 0;
-    sessionToken = ""; // Kasuj token - stare ciasteczko nie będzie już ważne
+    sessionToken = "";
 
     DIAG_PRINTLN(F("[LOGOUT] Session destroyed on server"));
 
-    // Kasuj ciasteczko w przeglądarce (data z przeszłości)
     String deleteCookie = String(COOKIE_NAME) + "=deleted; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT";
     server.sendHeader("Set-Cookie", deleteCookie);
     redirectTo(server, "/");
@@ -312,7 +408,6 @@ void handleSimPingFail()
 {
     if (!checkAuth())
         return;
-
     simPingFail = true;
     simStatus = "Rozpoczęto symulację awarii Ping - oczekiwanie na wykrycie...";
     Serial.println("Uruchomiono symulacje awarii Ping");
@@ -331,24 +426,30 @@ void handleSimNoWiFi()
     redirectTo(server, "/config");
 }
 
+void handleSimHighPing()
+{
+    if (!checkAuth())
+        return;
+    simHighPing = true;
+    simStatus = "Rozpoczęto symulację wysokiego ping - oczekiwanie na wykrycie...";
+    Serial.println("Uruchomiono symulacje wysokiego ping");
+    logEvent("Uruchomiono symulacje wysokiego ping");
+    redirectTo(server, "/config");
+}
+
 void handleStopSim()
 {
     if (!checkAuth())
         return;
 
-    // Sprawdź czy była aktywna symulacja
     bool wasActive = (simPingFail || simNoWiFi || simHighPing);
-
-    simPingFail = false;
-    simNoWiFi = false;
-    simHighPing = false;
+    simPingFail = simNoWiFi = simHighPing = false;
 
     if (wasActive)
     {
         simStatus = "Symulacja zakończona - Internet przywrócony ręcznie";
         Serial.println("Symulacja zakończona - Internet przywrócony");
         logEvent("SYMULACJA: Powrót internetu (reczny)");
-        // Zerujemy liczniki aby symulować powrót normalnego stanu
         failCount = 0;
         noWiFiStartTime = 0;
     }
@@ -358,17 +459,6 @@ void handleStopSim()
         Serial.println("Symulacje nie były aktywne");
     }
 
-    redirectTo(server, "/config");
-}
-
-void handleSimHighPing()
-{
-    if (!checkAuth())
-        return;
-    simHighPing = true;
-    simStatus = "Rozpoczęto symulację wysokiego ping - oczekiwanie na wykrycie...";
-    Serial.println("Uruchomiono symulacje wysokiego ping");
-    logEvent("Uruchomiono symulacje wysokiego ping");
     redirectTo(server, "/config");
 }
 
@@ -874,7 +964,7 @@ void handleConfig()
                 
                 <label for="wifipass">Hasło sieci:</label>
                 <div class="time-group">
-                    <input type="password" id="wifipass" name="wifipass" placeholder="Hasło WiFi">
+                    <input type="password" id="wifipass" name="pass" placeholder="Hasło WiFi">
                     <button type="button" onclick="togglePassword('wifipass')">👁️</button>
                 </div>
                 
@@ -891,7 +981,7 @@ void handleConfig()
                 <h4 style="margin-top: 25px;">Zapisane sieci:</h4>
                 <div class="wifi-list" id="wifiList">
     )rawliteral");
-    server.sendContent(html); // Wyślij pierwszą część (duża lista)
+    server.sendContent(html);
     html = "";
 
     // Lista sieci
@@ -919,6 +1009,35 @@ void handleConfig()
 
     html += F(R"rawliteral(
                 </div>
+
+                <!-- Sekcja konfiguracji sieci rezerwowej -->
+                <h4 style="margin-top: 25px; margin-bottom: 15px;">⚙️ Konfiguracja sieci rezerwowej (Backup Network)</h4>
+                <div style="background:var(--inp); padding:12px; border:1px solid var(--brd); border-radius:6px; margin-bottom:15px;">
+                    <div class="switch-wrap" style="justify-content: flex-start; margin-bottom:12px;">
+                        <label class="switch">
+                            <input type="checkbox" id="enableBackupNetwork" name="enableBackupNetwork" )rawliteral");
+    html += config.enableBackupNetwork ? "checked" : "";
+    html += F(R"rawliteral(>
+                            <span class="slider"></span>
+                        </label>
+                        <span style="margin-left: 10px;">Włącz sieć rezerwową (wymaga drugiego routera i przekaźnika GPIO)</span>
+                    </div>
+
+                    <label for="backupNetworkFailLimit">Limit błędów sieci rezerwowej: <span class="tooltip">?<span class="tooltiptext">Ile błędów w sieci rezerwowej zanim powróci do głównej sieci.</span></span></label>
+                    <input type="number" id="backupNetworkFailLimit" name="backupNetworkFailLimit" value=")rawliteral");
+    html += config.backupNetworkFailLimit;
+    html += F(R"rawliteral(" min="1" max="10" required>
+
+                    <label for="backupNetworkRetryInterval" style="margin-top:10px;">Interwał ponownej próby (ms): <span class="tooltip">?<span class="tooltiptext">Jak długo czekać między próbami przełączenia z powrotem na główną sieć.</span></span></label>
+                    <input type="number" id="backupNetworkRetryInterval" name="backupNetworkRetryInterval" value=")rawliteral");
+    html += config.backupNetworkRetryInterval;
+    html += F(R"rawliteral(" min="1000" required>
+
+                    <label for="pinRelayBackup" style="margin-top:10px;">Pin GPIO dla przekaźnika sieci rezerwowej: <span class="tooltip">?<span class="tooltiptext">GPIO pin sterujący przekaźnikiem drugiego routera (np. D8 = GPIO15).</span></span></label>
+                    <input type="number" id="pinRelayBackup" name="pinRelayBackup" value=")rawliteral");
+    html += config.pinRelayBackup;
+    html += F(R"rawliteral(" min="0" max="16">
+                </div>
             </div>
         </details>
 
@@ -938,11 +1057,12 @@ void handleConfig()
                     <button type="button" onclick="togglePassword('adminPass')">👁️</button>
                 </div>
 
-                <div style="text-align: center; margin-top: 30px; margin-bottom: 30px;">
-                    <button type="submit" style="padding: 12px 30px; font-size: 1.1em; background-color: #28a745;">Zapisz konfigurację</button>
-                </div>
             </div>
         </details>
+
+        <div style="text-align: center; margin-top: 20px; margin-bottom: 30px;">
+            <button type="submit" style="padding: 12px 30px; font-size: 1.1em; background-color: #28a745;">Zapisz konfigurację</button>
+        </div>
 
         <div class="section">
             <h3>Diagnostyka i Testy</h3>
@@ -1057,8 +1177,9 @@ void handleConfig()
     
     // Funkcja do dodawania sieci WiFi
     function addWiFiNetwork() {
-        const ssid = document.getElementById('ssid').value;
+        const ssid = document.getElementById('ssid').value.trim();
         const pass = document.getElementById('wifipass').value;
+        const networkType = document.getElementById('networkType').value;
         
         if (!ssid || ssid.trim() === '') {
             alert('Podaj nazwę sieci (SSID)!');
@@ -1068,29 +1189,36 @@ void handleConfig()
         const formData = new URLSearchParams();
         formData.append('ssid', ssid);
         formData.append('pass', pass);
+        formData.append('networkType', networkType);
         
         fetch('/addwifi', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
+            credentials: 'include',
             body: formData.toString()
         })
-        .then(response => {
-            if (response.ok) {
-                alert('Sieć WiFi została dodana!');
-                // Wyczyść pola
-                document.getElementById('ssid').value = '';
-                document.getElementById('wifipass').value = '';
-                // Odśwież stronę aby pokazać zaktualizowaną listę
-                window.location.reload();
-            } else {
-                alert('Błąd podczas dodawania sieci WiFi.');
+        .then(async response => {
+            const message = await response.text();
+            if (!response.ok) {
+                throw new Error(message || 'Błąd podczas dodawania sieci WiFi.');
             }
+
+            // Resetuj flagę dirty aby uniknąć dialogu beforeunload przy reload
+            isDirty = false;
+
+            // Wyczyść pola
+            document.getElementById('ssid').value = '';
+            document.getElementById('wifipass').value = '';
+
+            alert(message || 'Sieć WiFi została dodana!');
+            // Odśwież stronę aby pokazać zaktualizowaną listę
+            window.location.reload();
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Wystąpił błąd podczas komunikacji z urządzeniem.');
+            alert(error.message || 'Wystąpił błąd podczas komunikacji z urządzeniem.');
         });
     }
     
@@ -1163,273 +1291,84 @@ void handleConfig()
 void handleSaveConfig()
 {
     if (!checkAuth())
-    {
         return;
-    }
-    if (server.method() == HTTP_POST)
-    {
-        Serial.println("[WEBSERVER] Received config save request");
-        config.pingInterval = server.arg("pingInterval").toInt();
-        config.failLimit = server.arg("failLimit").toInt();
-        config.providerFailureLimit = server.arg("providerFailureLimit").toInt();
-        config.autoResetCountersHours = server.arg("autoResetCountersHours").toInt();
-        config.scheduledResetsEnabled = server.hasArg("scheduledResetsEnabled");
-        config.watchdogEnabled = server.hasArg("watchdogEnabled");
 
-        // Ładowanie zaplanowanych czasów resetów (format HH:MM)
-        for (int i = 0; i < 5; i++)
-        {
-            String argName = "resetTime" + String(i);
-            if (server.hasArg(argName))
-            {
-                String timeStr = server.arg(argName);
-                // Walidacja formatu HH:MM
-                if (timeStr.length() == 5 && timeStr[2] == ':')
-                {
-                    config.scheduledResetTimes[i] = timeStr;
-                }
-                else
-                {
-                    config.scheduledResetTimes[i] = ""; // Puste jeśli niepoprawny format
-                }
-            }
-            else
-            {
-                config.scheduledResetTimes[i] = "";
-            }
-        }
-
-        config.maxPingMs = server.arg("maxPingMs").toInt();
-        config.lagRetries = server.arg("lagRetries").toInt();
-        config.routerOffTime = server.arg("routerOffTime").toInt();
-        config.baseBootTime = server.arg("baseBootTime").toInt();
-        config.bootLoopWindowSeconds = server.arg("bootLoopWindowSeconds").toInt();
-        config.noWiFiTimeout = server.arg("noWiFiTimeout").toInt();
-        config.apConfigTimeout = server.arg("apConfigTimeout").toInt();
-        config.apMaxAttempts = server.arg("apMaxAttempts").toInt();
-        config.apBackoffMs = server.arg("apBackoffMs").toInt();
-        config.dhcpTimeoutMs = server.arg("dhcpTimeoutMs").toInt();
-        config.noWiFiBackoff = server.hasArg("noWiFiBackoff"); // Checkbox zwraca true jeśli jest zaznaczony
-        config.darkMode = server.hasArg("darkMode");           // Zapisz stan trybu ciemnego
-        config.intermittentMode = (server.arg("workMode") == "intermittent");
-        config.awakeWindowMs = server.arg("awakeWindowMs").toInt();
-        config.sleepWindowMs = server.arg("sleepWindowMs").toInt();
-        config.ledBrightness = constrain(server.arg("ledBrightness").toInt(), 0, 255);
-        config.host1 = server.arg("host1");
-        config.host2 = server.arg("host2");
-        config.gatewayOverride = server.arg("gatewayOverride");
-        config.useGatewayOverride = server.hasArg("useGatewayOverride");
-        config.adminUser = server.arg("adminUser");
-        config.adminPass = server.arg("adminPass");
-
-        // === BACKUP NETWORK ===
-        config.enableBackupNetwork = server.hasArg("enableBackupNetwork");
-        config.backupNetworkFailLimit = constrain(server.arg("backupNetworkFailLimit").toInt(), 1, 10);
-        config.backupNetworkRetryInterval = server.arg("backupNetworkRetryInterval").toInt();
-        if (config.backupNetworkRetryInterval <= 0)
-            config.backupNetworkRetryInterval = 600000; // Default 10 min
-        config.pinRelayBackup = server.arg("pinRelayBackup").toInt();
-
-        Serial.print("[WEBSERVER] Parsed config - ledBrightness=");
-        Serial.print(config.ledBrightness);
-        Serial.print(", darkMode=");
-        Serial.print(config.darkMode);
-        Serial.print(", pingInterval=");
-        Serial.println(config.pingInterval);
-
-        // Walidacja wartości
-        if (config.pingInterval <= 0)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Interwał ping musi być > 0", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.failLimit <= 0)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Limit błędów musi być > 0", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.providerFailureLimit <= 0)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Limit resetów dla dostawcy musi być > 0", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.maxPingMs <= 0)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Maksymalny ping musi być > 0", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.lagRetries <= 0)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Liczba spike'ów (lagRetries) musi być > 0", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.bootLoopWindowSeconds < 60)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Okno boot loop musi być ≥ 60 sekund", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.apMaxAttempts <= 0)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Maksymalna liczba prób AP musi być > 0", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.routerOffTime <= 0)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Czas wyłączenia routera musi być > 0", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.baseBootTime <= 0)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Czas rozruchu routera musi być > 0", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.noWiFiTimeout <= 0)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Timeout WiFi musi być > 0", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.intermittentMode)
-        {
-            if (config.awakeWindowMs <= 0)
-            {
-                sendErrorPage(server, "❌ Błąd walidacji", "Czas pracy w trybie przerywanym musi być > 0", "/config", "Powrót do konfiguracji", config.darkMode);
-                return;
-            }
-            if (config.sleepWindowMs <= 0)
-            {
-                sendErrorPage(server, "❌ Błąd walidacji", "Czas uśpienia w trybie przerywanym musi być > 0", "/config", "Powrót do konfiguracji", config.darkMode);
-                return;
-            }
-            // Walidacja limitów czasów uśpienia
-            if (config.sleepWindowMs < SLEEP_TIME_MIN_MS)
-            {
-                sendErrorPage(server, "❌ Błąd walidacji", "Czas uśpienia musi być co najmniej 5 minut (300s)", "/config", "Powrót do konfiguracji", config.darkMode);
-                return;
-            }
-            if (config.sleepWindowMs > SLEEP_TIME_MAX_MS)
-            {
-                sendErrorPage(server, "❌ Błąd walidacji", "Czas uśpienia nie może przekraczać 60 minut (3600s)", "/config", "Powrót do konfiguracji", config.darkMode);
-                return;
-            }
-        }
-        // Prosta walidacja IP (podstawowa)
-        if (!isValidIP(config.host1))
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Host1 nie jest prawidłowym adresem IP", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (!isValidIP(config.host2))
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Host2 nie jest prawidłowym adresem IP", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.useGatewayOverride)
-        {
-            if (config.gatewayOverride.length() == 0)
-            {
-                sendErrorPage(server, "❌ Błąd walidacji", "Włączono własną bramę, ale pole bramy jest puste", "/config", "Powrót do konfiguracji", config.darkMode);
-                return;
-            }
-            if (!isValidIP(config.gatewayOverride))
-            {
-                sendErrorPage(server, "❌ Błąd walidacji", "Adres bramy nie jest prawidłowym adresem IP", "/config", "Powrót do konfiguracji", config.darkMode);
-                return;
-            }
-        }
-        // Walidacja haseł administratora
-        if (config.adminUser.length() == 0)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Login administratora nie może być pusty", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.adminPass.length() == 0)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Hasło administratora nie może być puste", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-
-        // Walidacja wykluczających się ustawień
-        if (config.providerFailureLimit < config.failLimit)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Limit resetów dla dostawcy musi być >= limit błędów", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.maxTotalResetsEver <= config.providerFailureLimit)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Maksymalna liczba resetów ogółem musi być > limit resetów dla dostawcy", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        if (config.host1 == config.host2)
-        {
-            sendErrorPage(server, "❌ Błąd walidacji", "Host1 i Host2 nie mogą być takie same", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-
-        if (!saveConfig())
-        {
-            sendErrorPage(server, "❌ Błąd zapisu", "Błąd zapisu konfiguracji! Sprawdź miejsce w pamięci.", "/config", "Powrót do konfiguracji", config.darkMode);
-            return;
-        }
-        // Konfiguracja zapisana - przekieruj z komunikatem
-        redirectTo(server, "/config");
-    }
-    else
+    if (server.method() != HTTP_POST)
     {
         server.send(405, "text/plain", "Method Not Allowed");
+        return;
     }
+
+    Serial.println("[WEBSERVER] Received config save request");
+
+    // Parsowanie i walidacja wszystkich parametrów
+    if (!parseAndValidateConfigParams(server, config))
+        return; // Błąd został obsłużony w parseAndValidateConfigParams
+
+    // Zapis do pamięci Flash
+    if (!saveConfig())
+    {
+        sendErrorPage(server, "❌ Błąd zapisu", "Błąd zapisu konfiguracji! Sprawdź miejsce w pamięci.",
+                      "/config", "Powrót do konfiguracji", config.darkMode);
+        return;
+    }
+
+    // Konfiguracja zapisana - przekieruj
+    redirectTo(server, "/config");
 }
 
 void handleAddWiFi()
 {
     if (!checkAuth())
-    {
         return;
-    }
-    if (server.method() == HTTP_POST)
-    {
-        String ssid = server.arg("ssid");
-        String pass = server.arg("pass");
-        String networkTypeStr = server.arg("networkType"); // 0 = primary, 1 = backup
-
-        uaktualnijTablicePlik(ssid, pass);
-
-        // Ustawienie typu sieci dla ostatnio dodanej
-        if (tablica[0].ssid == ssid)
-        {
-            tablica[0].networkType = networkTypeStr.toInt();
-            zapiszTabliceDoPliku(WIFI_CONFIG_FILES, tablica);
-        }
-
-        String successMsg = "Sieć " + ssid + " (" + (networkTypeStr.toInt() == 1 ? "rezerwowa" : "główna") + ") została zapisana.";
-        sendSuccessPage(server, "✅ Sieć dodana", successMsg.c_str(), "/config", "Powrót do konfiguracji", config.darkMode);
-    }
-    else
+    if (server.method() != HTTP_POST)
     {
         server.send(405, "text/plain", "Method Not Allowed");
+        return;
     }
+
+    String ssid = server.arg("ssid");
+    ssid.trim();
+    String pass = server.arg("pass");
+    int networkType = server.hasArg("networkType") ? server.arg("networkType").toInt() : 0;
+
+    if (ssid.length() == 0)
+    {
+        server.send(400, "text/plain", "Podaj nazwę sieci (SSID).");
+        return;
+    }
+
+    uaktualnijTablicePlik(ssid, pass);
+
+    // Ustawienie typu sieci dla ostatnio dodanej
+    if (tablica[0].ssid == ssid)
+    {
+        tablica[0].networkType = networkType;
+        zapiszTabliceDoPliku(WIFI_CONFIG_FILES, tablica);
+    }
+
+    String successMsg = "Sieć " + ssid + " (" + (networkType == 1 ? "rezerwowa" : "główna") + ") została zapisana.";
+    server.send(200, "text/plain", successMsg);
 }
 
 void handleRemoveWiFi()
 {
     if (!checkAuth())
-    {
         return;
-    }
-    if (server.method() == HTTP_POST)
-    {
-        int index = server.arg("index").toInt();
-        if (index >= 0 && index < wielkoscTablicy)
-        {
-            tablica[index].ssid = "";
-            tablica[index].pass = "";
-            zapiszTabliceDoPliku(WIFI_CONFIG_FILES, tablica);
-        }
-        sendSuccessPage(server, "✅ Sieć usunięta", "Sieć została usunięta z listy.", "/config", "Powrót", config.darkMode);
-    }
-    else
+    if (server.method() != HTTP_POST)
     {
         server.send(405, "text/plain", "Method Not Allowed");
+        return;
     }
+
+    int index = server.arg("index").toInt();
+    if (index >= 0 && index < wielkoscTablicy)
+    {
+        tablica[index].ssid = "";
+        tablica[index].pass = "";
+        zapiszTabliceDoPliku(WIFI_CONFIG_FILES, tablica);
+    }
+    sendSuccessPage(server, "✅ Sieć usunięta", "Sieć została usunięta z listy.", "/config", "Powrót", config.darkMode);
 }
 
 void handleUpdatePage()
@@ -1608,23 +1547,19 @@ void handleUpdateUpload()
 void handleManualConfig()
 {
     if (!checkAuth())
-    {
         return;
-    }
     WiFi.mode(WIFI_AP);
     uruchomAP();
     uruchommDNS();
     statusMsg = "Tryb konfiguracyjny - ręczny";
-    lastAPCheckTime = millis(); // Reset licznika, aby dać czas na konfigurację (5 min)
+    lastAPCheckTime = millis();
     server.send(200, "text/html; charset=utf-8", "<h1>Tryb konfiguracyjny uruchomiony!</h1><p>Połącz się z siecią ESP8266_Config.</p><a href='/config'>Konfiguracja</a>");
 }
 
 void handleFactoryReset()
 {
     if (!checkAuth())
-    {
         return;
-    }
 
     // Usuwanie plików konfiguracyjnych
     if (LittleFS.exists(CONFIG_FILE))
@@ -1634,7 +1569,6 @@ void handleFactoryReset()
     if (LittleFS.exists(WIFI_CONFIG_FILES))
         LittleFS.remove(WIFI_CONFIG_FILES);
 
-    // Wyświetl stronę z odliczaniem (20 sekund na restart i konfigurację AP)
     sendCountdownPage(server, "🏭 Przywracanie ustawień fabrycznych",
                       "Konfiguracja została usunięta. Urządzenie uruchomi się w trybie AP. Połącz się z siecią ESP8266_Config.",
                       20, "/", config.darkMode);
@@ -1645,10 +1579,7 @@ void handleFactoryReset()
 void handleReboot()
 {
     if (!checkAuth())
-    {
         return;
-    }
-    // Wyświetl stronę z odliczaniem (15 sekund na restart ESP)
     sendCountdownPage(server, "🔄 Restartowanie urządzenia",
                       "Urządzenie uruchamia się ponownie. Za chwilę nastąpi automatyczne przekierowanie...",
                       15, "/", config.darkMode);
@@ -1664,9 +1595,7 @@ void handleNotFound()
 void handleSetBrightness()
 {
     if (!checkAuth())
-    {
         return;
-    }
 
     if (!server.hasArg("val"))
     {
@@ -1674,28 +1603,22 @@ void handleSetBrightness()
         return;
     }
 
-    int brightness = constrain(server.arg("val").toInt(), 0, 255);
-    config.ledBrightness = brightness;
+    config.ledBrightness = constrain(server.arg("val").toInt(), 0, 255);
     Serial.print("[WEBSERVER] handleSetBrightness: brightness=");
-    Serial.println(brightness);
+    Serial.println(config.ledBrightness);
 
-    // Odśwież LEDy z nową jasnością (zachowując aktualny stan kolorów)
-    refreshLed();
-
-    // Nie zapisujemy od razu do Flash - zrobi to debounced handler po 2 sekundach
+    refreshLed(); // Odśwież LEDy z nową jasnością
     server.send(200, "text/plain", "OK");
 }
 
 void handleSaveBrightness()
 {
     if (!checkAuth())
-    {
         return;
-    }
 
-    // Endpoint wywoływany przez debounced JavaScript po zakończeniu zmian
     Serial.print("[WEBSERVER] handleSaveBrightness: saving brightness=");
     Serial.println(config.ledBrightness);
+
     if (saveConfig())
     {
         server.send(200, "text/plain", "Saved");
