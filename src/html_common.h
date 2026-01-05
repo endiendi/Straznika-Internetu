@@ -373,6 +373,34 @@ function setGlobalUnit(unit) {
         globalUnitInput.value = unit;
     }
 }
+function showSaveNotice() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('saved') !== '1') return;
+
+    const toast = document.createElement('div');
+    toast.textContent = '✅ Konfiguracja zapisana';
+    toast.style.position = 'fixed';
+    toast.style.top = '12px';
+    toast.style.right = '12px';
+    toast.style.background = '#0b5137';
+    toast.style.color = '#d1fae5';
+    toast.style.border = '1px solid #34d399';
+    toast.style.padding = '10px 14px';
+    toast.style.borderRadius = '6px';
+    toast.style.boxShadow = '0 6px 16px rgba(0,0,0,0.25)';
+    toast.style.zIndex = '9999';
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-8px)';
+        setTimeout(() => toast.remove(), 450);
+    }, 1800);
+
+    // Usuń parametr z adresu, żeby nie powtarzać powiadomienia
+    history.replaceState({}, '', window.location.pathname);
+}
 function validateSleepTimes() {
     // Walidacja czasów uśpienia: min 5 min, max 60 min
     const SLEEP_MIN_MS = 5 * 60 * 1000;      // 5 minut

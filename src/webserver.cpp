@@ -293,36 +293,6 @@ void setupWebServer()
     server.on("/savebrightness", handleSaveBrightness);
     server.on("/downloadlogs", handleDownloadLogs);
     server.begin();
-
-        // Krótkie powiadomienie o udanym zapisie konfiguracji
-        function showSaveNotice() {
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('saved') !== '1') return;
-
-            const toast = document.createElement('div');
-            toast.textContent = '✅ Konfiguracja zapisana';
-            toast.style.position = 'fixed';
-            toast.style.top = '12px';
-            toast.style.right = '12px';
-            toast.style.background = '#0b5137';
-            toast.style.color = '#d1fae5';
-            toast.style.border = '1px solid #34d399';
-            toast.style.padding = '10px 14px';
-            toast.style.borderRadius = '6px';
-            toast.style.boxShadow = '0 6px 16px rgba(0,0,0,0.25)';
-            toast.style.zIndex = '9999';
-            document.body.appendChild(toast);
-
-            setTimeout(() => {
-                toast.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-                toast.style.opacity = '0';
-                toast.style.transform = 'translateY(-8px)';
-                setTimeout(() => toast.remove(), 450);
-            }, 1800);
-
-            // Usuń parametr z adresu, żeby nie powtarzać powiadomienia
-            history.replaceState({}, '', window.location.pathname);
-        }
 }
 
 void handleRoot()
@@ -725,7 +695,7 @@ void handleConfig()
     // Rozpocznij body
     String html = F(R"rawliteral(
 </head>
-<body onload="initFields(); initTheme(); setupFormHandlers(); showSaveNotice()">
+<body>
     <div class="container">
         <h1>Konfiguracja Strażnika Internetu</h1>
         <form id="configForm" action="/saveconfig" method="POST">
@@ -1337,7 +1307,21 @@ void handleConfig()
             countdownInterval = setInterval(updateSessionCountdown, 1000);
         }
     }
-    
+
+    // Upewnij się, że pola i powiadomienia inicjalizują się po pełnym załadowaniu DOM
+    document.addEventListener('DOMContentLoaded', () => {
+        initFields();
+        setupFormHandlers();
+        initTheme();
+        showSaveNotice();
+        startSessionCountdown();
+        // Wymuś przeliczenie pól na zapisaną jednostkę globalną po odświeżeniu
+        const gu = document.getElementById('globalUnit');
+        if (gu) {
+            setGlobalUnit(parseInt(gu.value || '1000'));
+        }
+    });
+
     // Ostrzegaj przed opuszczeniem strony, jeśli są niezapisane dane
     let isDirty = false;
     const configForm = document.getElementById('configForm');
@@ -1431,35 +1415,35 @@ void handleConfig()
     function initFields() {
         // Przywróć pola czasu
         initTimeField('pingInterval', )rawliteral");
-    html += config.pingInterval;
-    html += F(R"rawliteral());
+    html += String(config.pingInterval);
+    html += F(R"rawliteral();
         initTimeField('routerOffTime', )rawliteral");
-    html += config.routerOffTime;
-    html += F(R"rawliteral());
+    html += String(config.routerOffTime);
+    html += F(R"rawliteral();
         initTimeField('baseBootTime', )rawliteral");
-    html += config.baseBootTime;
-    html += F(R"rawliteral());
+    html += String(config.baseBootTime);
+    html += F(R"rawliteral();
         initTimeField('noWiFiTimeout', )rawliteral");
-    html += config.noWiFiTimeout;
-    html += F(R"rawliteral());
+    html += String(config.noWiFiTimeout);
+    html += F(R"rawliteral();
         initTimeField('apConfigTimeout', )rawliteral");
-    html += config.apConfigTimeout;
-    html += F(R"rawliteral());
+    html += String(config.apConfigTimeout);
+    html += F(R"rawliteral();
         initTimeField('awakeWindowMs', )rawliteral");
-    html += config.awakeWindowMs;
-    html += F(R"rawliteral());
+    html += String(config.awakeWindowMs);
+    html += F(R"rawliteral();
         initTimeField('sleepWindowMs', )rawliteral");
-    html += config.sleepWindowMs;
-    html += F(R"rawliteral());
+    html += String(config.sleepWindowMs);
+    html += F(R"rawliteral();
         initTimeField('maxPingMs', )rawliteral");
-    html += config.maxPingMs;
-    html += F(R"rawliteral());
+    html += String(config.maxPingMs);
+    html += F(R"rawliteral();
         initTimeField('apBackoffMs', )rawliteral");
-    html += config.apBackoffMs;
-    html += F(R"rawliteral());
+    html += String(config.apBackoffMs);
+    html += F(R"rawliteral();
         initTimeField('dhcpTimeoutMs', )rawliteral");
-    html += config.dhcpTimeoutMs;
-    html += F(R"rawliteral());
+    html += String(config.dhcpTimeoutMs);
+    html += F(R"rawliteral();
 
         // Ustaw i zapamiętaj wybraną globalną jednostkę
         var gu = document.getElementById('globalUnit').value || '1000';
