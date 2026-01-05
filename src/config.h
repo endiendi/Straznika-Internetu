@@ -17,6 +17,7 @@ struct Config
     unsigned long noWiFiTimeout = 600000;   // Domyślnie 10 minut
     bool noWiFiBackoff = false;             // Czy wydłużać czas przy awarii
     bool darkMode = false;                  // Tryb ciemny
+    int globalUnit = 1000;                  // Domyślna globalna jednostka (ms=1, s=1000, min=60000)
     bool intermittentMode = false;          // Praca przerywana (uśpienia między cyklami)
     unsigned long awakeWindowMs = 300000;   // Jak długo pracować przed snem (domyślnie 5 min)
     unsigned long sleepWindowMs = 900000;   // Jak długo spać w trybie przerywanym (domyślnie 15 min)

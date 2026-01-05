@@ -179,6 +179,14 @@ bool parseAndValidateConfigParams(ESP8266WebServer &srv, Config &cfg)
     Serial.print(cfg.adminPass.length());
     Serial.println(")");
 
+    // Jednostka globalna (ms/s/min) używana do konwersji pól czasowych
+    String unitArg = srv.arg("globalUnitValue");
+    cfg.globalUnit = unitArg.length() ? unitArg.toInt() : 1000;
+    if (cfg.globalUnit != 1 && cfg.globalUnit != 1000 && cfg.globalUnit != 60000)
+        cfg.globalUnit = 1000;
+    Serial.print(F("  • globalUnitValue: "));
+    Serial.println(cfg.globalUnit);
+
     // Parsowanie sieci rezerwowej
     cfg.backupNetworkFailLimit = constrain(srv.arg("backupNetworkFailLimit").toInt(), 1, 10);
     cfg.backupNetworkRetryInterval = srv.arg("backupNetworkRetryInterval").toInt();
@@ -227,12 +235,6 @@ bool parseAndValidateConfigParams(ESP8266WebServer &srv, Config &cfg)
         }
     }
 
-    // Logowanie wybranej jednostki globalnej
-    String globalUnit = srv.arg("globalUnitValue");
-    Serial.println(F("\n[PARSER] Ustawienia globalne:"));
-    Serial.print(F("  • globalUnitValue: "));
-    Serial.println(globalUnit.length() > 0 ? globalUnit : "1000 (default)");
-
     Serial.print("[WEBSERVER] Parsed config - ledBrightness=");
     Serial.print(cfg.ledBrightness);
     Serial.print(", darkMode=");
@@ -241,7 +243,7 @@ bool parseAndValidateConfigParams(ESP8266WebServer &srv, Config &cfg)
     Serial.println(cfg.pingInterval);
 
     Serial.println(F("\n[PARSER] ✅ Parsowanie zakończone - wszystkie pola odczytane"));
-    Serial.println(F("  Ilość parametrów: 33 + globalUnitValue"));
+    Serial.println(F("  Ilość parametrów: 33"));
 
     // Walidacja wszystkich parametrów
     String validationError = validateAllConfigParams(
@@ -291,6 +293,36 @@ void setupWebServer()
     server.on("/savebrightness", handleSaveBrightness);
     server.on("/downloadlogs", handleDownloadLogs);
     server.begin();
+
+        // Krótkie powiadomienie o udanym zapisie konfiguracji
+        function showSaveNotice() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('saved') !== '1') return;
+
+            const toast = document.createElement('div');
+            toast.textContent = '✅ Konfiguracja zapisana';
+            toast.style.position = 'fixed';
+            toast.style.top = '12px';
+            toast.style.right = '12px';
+            toast.style.background = '#0b5137';
+            toast.style.color = '#d1fae5';
+            toast.style.border = '1px solid #34d399';
+            toast.style.padding = '10px 14px';
+            toast.style.borderRadius = '6px';
+            toast.style.boxShadow = '0 6px 16px rgba(0,0,0,0.25)';
+            toast.style.zIndex = '9999';
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-8px)';
+                setTimeout(() => toast.remove(), 450);
+            }, 1800);
+
+            // Usuń parametr z adresu, żeby nie powtarzać powiadomienia
+            history.replaceState({}, '', window.location.pathname);
+        }
 }
 
 void handleRoot()
@@ -693,7 +725,7 @@ void handleConfig()
     // Rozpocznij body
     String html = F(R"rawliteral(
 </head>
-<body onload="initFields(); initTheme()">
+<body onload="initFields(); initTheme(); setupFormHandlers(); showSaveNotice()">
     <div class="container">
         <h1>Konfiguracja Strażnika Internetu</h1>
         <form id="configForm" action="/saveconfig" method="POST">
@@ -709,8 +741,20 @@ void handleConfig()
                         <span class="slider"></span>
                     </label>
                 </div>
-                <label style="font-size:0.95em;">Jednostki globalne: <select id="globalUnit" name="globalUnit" onchange="setGlobalUnit(this.value)" style="margin-left:5px; padding:4px;"><option value="1">ms</option><option value="1000" selected>s</option><option value="60000">min</option></select></label>
-                <input type="hidden" id="globalUnitValue" name="globalUnitValue" value="1000">
+                <label style="font-size:0.95em;">Jednostki globalne: <select id="globalUnit" name="globalUnit" onchange="setGlobalUnit(this.value)" style="margin-left:5px; padding:4px;">
+                    <option value="1" )rawliteral");
+    html += (config.globalUnit == 1) ? "selected" : "";
+    html += F(R"rawliteral(>ms</option>
+                    <option value="1000" )rawliteral");
+    html += (config.globalUnit == 1000) ? "selected" : "";
+    html += F(R"rawliteral(>s</option>
+                    <option value="60000" )rawliteral");
+    html += (config.globalUnit == 60000) ? "selected" : "";
+    html += F(R"rawliteral(>min</option>
+                </select></label>
+                <input type="hidden" id="globalUnitValue" name="globalUnitValue" value=")rawliteral");
+    html += config.globalUnit;
+    html += F(R"rawliteral(">
             </div>
         </div>
 
@@ -1416,6 +1460,11 @@ void handleConfig()
         initTimeField('dhcpTimeoutMs', )rawliteral");
     html += config.dhcpTimeoutMs;
     html += F(R"rawliteral());
+
+        // Ustaw i zapamiętaj wybraną globalną jednostkę
+        var gu = document.getElementById('globalUnit').value || '1000';
+        setGlobalUnit(parseInt(gu));
+        document.getElementById('globalUnitValue').value = gu;
         
         // Załaduj harmonogram resetów
         console.log('[JS] Wczytywanie harmonogramu resetów...');
@@ -1426,20 +1475,8 @@ void handleConfig()
             }
         }
         
-        // ========== AKORDEONY - TYLKO JEDNA ZAKŁADKA NARAZ ==========
-        var accordions = document.querySelectorAll('.accordion');
-        accordions.forEach(accordion => {
-            accordion.addEventListener('toggle', function(event) {
-                if (this.open) {
-                    accordions.forEach(other => {
-                        if (other !== this) {
-                            other.open = false;
-                        }
-                    });
-                }
-            });
-        });
-        console.log('[JS] Akordeony zainicjalizowane - znaleziono ' + accordions.length + ' zakładek');
+        // Event listener dla zmian trybu pracy
+        document.querySelectorAll('input[name="workMode"]').forEach(r => r.addEventListener('change', toggleDutyFields));
         
         toggleDutyFields();
         initTheme();
@@ -1467,36 +1504,41 @@ void handleConfig()
         });
     }
     
-    // Event listeners i inicjalizacja
-    document.querySelectorAll('input[name="workMode"]').forEach(r => r.addEventListener('change', toggleDutyFields));
-    toggleDutyFields();
-    initTheme();
-    
     // ========== GWARANCJA AKTUALIZACJI PÓL UKRYTYCH PRZED SUBMIT ==========
-    // To rozwiązanie zapewnia, że pole ukryte (hidden) będzie zawsze mieć
-    // prawidłową wartość zanim formularz zostanie wysłany do serwera.
-    // Zapobiega problemowi "stare wartości po zapisie".
-    document.getElementById('configForm').addEventListener('submit', function(e) {
-        var timeFields = ['pingInterval', 'routerOffTime', 'baseBootTime', 'noWiFiTimeout',
-                         'apConfigTimeout', 'awakeWindowMs', 'sleepWindowMs', 'maxPingMs',
-                         'apBackoffMs', 'dhcpTimeoutMs'];
+    function setupFormHandlers() {
+        // To rozwiązanie zapewnia, że pole ukryte (hidden) będzie zawsze mieć
+        // prawidłową wartość zanim formularz zostanie wysłany do serwera.
+        // Zapobiega problemowi "stare wartości po zapisie".
+        var configForm = document.getElementById('configForm');
+        if (!configForm) {
+            console.error('[JS] Nie znaleziono formularza configForm!');
+            return;
+        }
         
-        timeFields.forEach(function(fieldId) {
-            var dispInput = document.getElementById(fieldId + '_disp');
-            var unitSelect = document.getElementById(fieldId + '_unit');
-            var hiddenInput = document.getElementById(fieldId);
+        configForm.addEventListener('submit', function(e) {
+            var timeFields = ['pingInterval', 'routerOffTime', 'baseBootTime', 'noWiFiTimeout',
+                             'apConfigTimeout', 'awakeWindowMs', 'sleepWindowMs', 'maxPingMs',
+                             'apBackoffMs', 'dhcpTimeoutMs'];
             
-            if (dispInput && unitSelect && hiddenInput) {
-                var disp = parseFloat(dispInput.value) || 0;
-                var unit = parseInt(unitSelect.value) || 1;
-                var valueMs = Math.round(disp * unit);
-                hiddenInput.value = valueMs;
-            }
+            timeFields.forEach(function(fieldId) {
+                var dispInput = document.getElementById(fieldId + '_disp');
+                var unitSelect = document.getElementById(fieldId + '_unit');
+                var hiddenInput = document.getElementById(fieldId);
+                
+                if (dispInput && unitSelect && hiddenInput) {
+                    var disp = parseFloat(dispInput.value) || 0;
+                    var unit = parseInt(unitSelect.value) || 1;
+                    var valueMs = Math.round(disp * unit);
+                    hiddenInput.value = valueMs;
+                }
+            });
+            
+            console.log('[JS] Formularz przygotowany do wysłania');
+            // Formularz może być wysłany z gwarancją że wszystkie pola są aktualne
+            return true;
         });
-        
-        // Formularz może być wysłany z gwarancją że wszystkie pola są aktualne
-        return true;
-    });
+        console.log('[JS] Submit handler zarejestrowany');
+    }
     </script>
 </body>
 </html>
@@ -1535,8 +1577,8 @@ void handleSaveConfig()
         return;
     }
 
-    // Konfiguracja zapisana - przekieruj
-    redirectTo(server, "/config");
+    // Konfiguracja zapisana - przekieruj z flagą sukcesu
+    redirectTo(server, "/config?saved=1");
 }
 
 void handleWiFiPage()

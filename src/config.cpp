@@ -57,6 +57,8 @@ bool saveConfig()
     Serial.println(config.bootLoopWindowSeconds);
     Serial.print(F("  • config.adminUser: "));
     Serial.println(config.adminUser);
+    Serial.print(F("  • config.globalUnit: "));
+    Serial.println(config.globalUnit);
     Serial.println(F("\n[ZAPIS] Harmonogram resetów:"));
     Serial.print(F("  • config.scheduledResetsEnabled: "));
     Serial.println(config.scheduledResetsEnabled ? "ON" : "OFF");
@@ -103,6 +105,7 @@ bool saveConfig()
     doc["gatewayOverride"] = config.gatewayOverride;
     doc["useGatewayOverride"] = config.useGatewayOverride;
     doc["pinRelay"] = config.pinRelay;
+    doc["globalUnit"] = config.globalUnit;
     doc["relayActiveHigh"] = config.relayActiveHigh;
     doc["pinRed"] = config.pinRed;
     doc["pinGreen"] = config.pinGreen;
@@ -347,6 +350,9 @@ bool loadConfig()
     Serial.println(config.bootLoopWindowSeconds);
     Serial.print(F("  • config.adminUser: "));
     Serial.println(config.adminUser);
+    config.globalUnit = doc["globalUnit"] | 1000;
+    Serial.print(F("  • config.globalUnit: "));
+    Serial.println(config.globalUnit);
     Serial.println(F("\n[ODCZYT] Harmonogram resetów:"));
     Serial.print(F("  • config.scheduledResetsEnabled: "));
     Serial.println(config.scheduledResetsEnabled ? "ON" : "OFF");

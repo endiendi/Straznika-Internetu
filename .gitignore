@@ -54,3 +54,4 @@ src/*.md
 *.css
 *.log
 *.bin
+*.txt
