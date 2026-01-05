@@ -22,10 +22,51 @@ void handleSimPingFail();      // Deklaracja funkcji symulacji awarii ping
 void handleLoginPage();        // Formularz logowania
 void handleLoginSubmit();      // Weryfikacja logowania
 void handleDownloadLogs();     // Pobranie pliku logów
+void handleWiFiPage();         // Strona konfiguracji WiFi
+void handleSaveBackupConfig(); // Zapis ustawień sieci rezerwowej
+void handleListWiFi();         // Zwraca listę zapisanych sieci (JSON)
 
 // Pozostałe funkcje i zmienne (tablica, uaktualnijTablicePlik itp.) są dostępne dzięki #include "WiFiConfig.h"
 
 ESP8266WebServer server(80);
+
+// Statyczne fragmenty sekcji WiFi (mniejsze zużycie RAM i mniej konkatenacji)
+static const char WIFI_SECTION_HEAD[] PROGMEM = R"rawliteral(
+
+        <details class="section accordion">
+            <summary><h2>📶 Sieci WiFi</h2></summary>
+            <div class="accordion-content">
+                <label for="ssid">Nazwa sieci (SSID):</label>
+                <input type="text" id="ssid" name="ssid" placeholder="Wprowadź SSID sieci WiFi">
+                
+                <label for="wifipass">Hasło sieci:</label>
+                <div class="time-group">
+                    <input type="password" id="wifipass" name="pass" placeholder="Hasło WiFi">
+                    <button type="button" onclick="togglePassword('wifipass')">👁️</button>
+                </div>
+                
+                <label for="networkType">Typ sieci: <span class="tooltip">?<span class="tooltiptext">Główna: domyślna sieć. Rezerwowa: włącza się gdy główna zawiedzie (wymaga drugiego routera i przekaźnika).</span></span></label>
+                <select id="networkType" name="networkType">
+                    <option value="0">🟢 Główna (Primary)</option>
+                    <option value="1">🔴 Rezerwowa (Backup)</option>
+                </select>
+                
+                <div style="text-align: center; margin-top: 15px;">
+                    <button type="button" onclick="addWiFiNetwork()" style="padding: 10px 20px; background-color: #007bff;">Zapisz/dodaj sieć WiFi</button>
+                </div>
+                
+                <h4 style="margin-top: 25px;">Zapisane sieci:</h4>
+                <div class="wifi-list" id="wifiList">
+)rawliteral";
+
+static const char WIFI_SECTION_FOOT[] PROGMEM = R"rawliteral(
+                </div>
+
+                <h4 style="margin-top: 25px; margin-bottom: 15px;">⚙️ Konfiguracja sieci rezerwowej (Backup Network)</h4>
+                <div style="background:var(--inp); padding:12px; border:1px solid var(--brd); border-radius:6px; margin-bottom:15px;">
+                    <div class="switch-wrap" style="justify-content: flex-start; margin-bottom:12px;">
+                        <label class="switch">
+)rawliteral";
 
 // ============================================================================
 // FUNKCJE POMOCNICZE DO PARSOWANIA I WALIDACJI KONFIGURACJI
@@ -35,42 +76,108 @@ ESP8266WebServer server(80);
 /// Zwraca false jeśli walidacja nie powiedzie się i wysyła błąd
 bool parseAndValidateConfigParams(ESP8266WebServer &srv, Config &cfg)
 {
+    Serial.println(F("\n┌────────────────────────────────────────┐"));
+    Serial.println(F("│ [PARSER] CZYTAM DANE Z POST /saveconfig │"));
+    Serial.println(F("└────────────────────────────────────────┘"));
+
+    Serial.println(F("\n[PARSER] Otrzymane wartości POST:"));
     // Parsowanie parametrów numerycznych
     cfg.pingInterval = srv.arg("pingInterval").toInt();
+    Serial.print(F("  • pingInterval: "));
+    Serial.println(cfg.pingInterval);
     cfg.failLimit = srv.arg("failLimit").toInt();
+    Serial.print(F("  • failLimit: "));
+    Serial.println(cfg.failLimit);
     cfg.providerFailureLimit = srv.arg("providerFailureLimit").toInt();
+    Serial.print(F("  • providerFailureLimit: "));
+    Serial.println(cfg.providerFailureLimit);
     cfg.autoResetCountersHours = srv.arg("autoResetCountersHours").toInt();
+    Serial.print(F("  • autoResetCountersHours: "));
+    Serial.println(cfg.autoResetCountersHours);
     cfg.maxPingMs = srv.arg("maxPingMs").toInt();
+    Serial.print(F("  • maxPingMs: "));
+    Serial.println(cfg.maxPingMs);
     cfg.lagRetries = srv.arg("lagRetries").toInt();
+    Serial.print(F("  • lagRetries: "));
+    Serial.println(cfg.lagRetries);
     cfg.routerOffTime = srv.arg("routerOffTime").toInt();
+    Serial.print(F("  • routerOffTime: "));
+    Serial.println(cfg.routerOffTime);
     cfg.baseBootTime = srv.arg("baseBootTime").toInt();
+    Serial.print(F("  • baseBootTime: "));
+    Serial.println(cfg.baseBootTime);
     cfg.bootLoopWindowSeconds = srv.arg("bootLoopWindowSeconds").toInt();
+    Serial.print(F("  • bootLoopWindowSeconds: "));
+    Serial.println(cfg.bootLoopWindowSeconds);
     cfg.noWiFiTimeout = srv.arg("noWiFiTimeout").toInt();
+    Serial.print(F("  • noWiFiTimeout: "));
+    Serial.println(cfg.noWiFiTimeout);
     cfg.apConfigTimeout = srv.arg("apConfigTimeout").toInt();
+    Serial.print(F("  • apConfigTimeout: "));
+    Serial.println(cfg.apConfigTimeout);
     cfg.apMaxAttempts = srv.arg("apMaxAttempts").toInt();
+    Serial.print(F("  • apMaxAttempts: "));
+    Serial.println(cfg.apMaxAttempts);
     cfg.apBackoffMs = srv.arg("apBackoffMs").toInt();
+    Serial.print(F("  • apBackoffMs: "));
+    Serial.println(cfg.apBackoffMs);
     cfg.dhcpTimeoutMs = srv.arg("dhcpTimeoutMs").toInt();
+    Serial.print(F("  • dhcpTimeoutMs: "));
+    Serial.println(cfg.dhcpTimeoutMs);
     cfg.awakeWindowMs = srv.arg("awakeWindowMs").toInt();
+    Serial.print(F("  • awakeWindowMs: "));
+    Serial.println(cfg.awakeWindowMs);
     cfg.sleepWindowMs = srv.arg("sleepWindowMs").toInt();
+    Serial.print(F("  • sleepWindowMs: "));
+    Serial.println(cfg.sleepWindowMs);
     cfg.ledBrightness = constrain(srv.arg("ledBrightness").toInt(), 0, 255);
+    Serial.print(F("  • ledBrightness: "));
+    Serial.println(cfg.ledBrightness);
 
     // Parsowanie checkboxów
+    Serial.println(F("\n[PARSER] Checkboxy:"));
     cfg.scheduledResetsEnabled = srv.hasArg("scheduledResetsEnabled");
+    Serial.print(F("  • scheduledResetsEnabled: "));
+    Serial.println(cfg.scheduledResetsEnabled ? "ON" : "OFF");
     cfg.watchdogEnabled = srv.hasArg("watchdogEnabled");
+    Serial.print(F("  • watchdogEnabled: "));
+    Serial.println(cfg.watchdogEnabled ? "ON" : "OFF");
     cfg.noWiFiBackoff = srv.hasArg("noWiFiBackoff");
+    Serial.print(F("  • noWiFiBackoff: "));
+    Serial.println(cfg.noWiFiBackoff ? "ON" : "OFF");
     cfg.darkMode = srv.hasArg("darkMode");
+    Serial.print(F("  • darkMode: "));
+    Serial.println(cfg.darkMode ? "ON" : "OFF");
     cfg.useGatewayOverride = srv.hasArg("useGatewayOverride");
+    Serial.print(F("  • useGatewayOverride: "));
+    Serial.println(cfg.useGatewayOverride ? "ON" : "OFF");
     cfg.enableBackupNetwork = srv.hasArg("enableBackupNetwork");
+    Serial.print(F("  • enableBackupNetwork: "));
+    Serial.println(cfg.enableBackupNetwork ? "ON" : "OFF");
 
     // Parsowanie trybu pracy
     cfg.intermittentMode = (srv.arg("workMode") == "intermittent");
+    Serial.print(F("\n[PARSER] Tryb pracy (workMode): "));
+    Serial.println(cfg.intermittentMode ? "intermittent" : "normal");
 
     // Parsowanie adresów IP i haseł
+    Serial.println(F("\n[PARSER] Adresy IP i hasła:"));
     cfg.host1 = srv.arg("host1");
+    Serial.print(F("  • host1: "));
+    Serial.println(cfg.host1);
     cfg.host2 = srv.arg("host2");
+    Serial.print(F("  • host2: "));
+    Serial.println(cfg.host2);
     cfg.gatewayOverride = srv.arg("gatewayOverride");
+    Serial.print(F("  • gatewayOverride: "));
+    Serial.println(cfg.gatewayOverride);
     cfg.adminUser = srv.arg("adminUser");
+    Serial.print(F("  • adminUser: "));
+    Serial.println(cfg.adminUser);
     cfg.adminPass = srv.arg("adminPass");
+    Serial.print(F("  • adminPass: [***] (length: "));
+    Serial.print(cfg.adminPass.length());
+    Serial.println(")");
 
     // Parsowanie sieci rezerwowej
     cfg.backupNetworkFailLimit = constrain(srv.arg("backupNetworkFailLimit").toInt(), 1, 10);
@@ -78,8 +185,16 @@ bool parseAndValidateConfigParams(ESP8266WebServer &srv, Config &cfg)
     if (cfg.backupNetworkRetryInterval <= 0)
         cfg.backupNetworkRetryInterval = 600000; // Default 10 min
     cfg.pinRelayBackup = srv.arg("pinRelayBackup").toInt();
+    Serial.println(F("\n[PARSER] Sieć rezerwowa:"));
+    Serial.print(F("  • backupNetworkFailLimit: "));
+    Serial.println(cfg.backupNetworkFailLimit);
+    Serial.print(F("  • backupNetworkRetryInterval: "));
+    Serial.println(cfg.backupNetworkRetryInterval);
+    Serial.print(F("  • pinRelayBackup: "));
+    Serial.println(cfg.pinRelayBackup);
 
     // Parsowanie zaplanowanych czasów resetów
+    Serial.println(F("\n[PARSER] Harmonogram resetów:"));
     for (int i = 0; i < 5; i++)
     {
         String argName = "resetTime" + String(i);
@@ -90,17 +205,33 @@ bool parseAndValidateConfigParams(ESP8266WebServer &srv, Config &cfg)
             if (timeStr.length() == 5 && timeStr[2] == ':')
             {
                 cfg.scheduledResetTimes[i] = timeStr;
+                Serial.print(F("  • resetTime["));
+                Serial.print(i);
+                Serial.print(F("]: "));
+                Serial.println(timeStr);
             }
             else
             {
                 cfg.scheduledResetTimes[i] = "";
+                Serial.print(F("  • resetTime["));
+                Serial.print(i);
+                Serial.println(F("]: (pusty)"));
             }
         }
         else
         {
             cfg.scheduledResetTimes[i] = "";
+            Serial.print(F("  • resetTime["));
+            Serial.print(i);
+            Serial.println(F("]: (brak w POST)"));
         }
     }
+
+    // Logowanie wybranej jednostki globalnej
+    String globalUnit = srv.arg("globalUnitValue");
+    Serial.println(F("\n[PARSER] Ustawienia globalne:"));
+    Serial.print(F("  • globalUnitValue: "));
+    Serial.println(globalUnit.length() > 0 ? globalUnit : "1000 (default)");
 
     Serial.print("[WEBSERVER] Parsed config - ledBrightness=");
     Serial.print(cfg.ledBrightness);
@@ -108,6 +239,9 @@ bool parseAndValidateConfigParams(ESP8266WebServer &srv, Config &cfg)
     Serial.print(cfg.darkMode);
     Serial.print(", pingInterval=");
     Serial.println(cfg.pingInterval);
+
+    Serial.println(F("\n[PARSER] ✅ Parsowanie zakończone - wszystkie pola odczytane"));
+    Serial.println(F("  Ilość parametrów: 33 + globalUnitValue"));
 
     // Walidacja wszystkich parametrów
     String validationError = validateAllConfigParams(
@@ -137,10 +271,13 @@ void setupWebServer()
     server.on("/reset", handleManualReset);
     server.on("/reboot", handleReboot);
     server.on("/config", handleConfig);
+    server.on("/wifi", handleWiFiPage);
     server.on("/clearlogs", handleClearLogs);
     server.on("/saveconfig", HTTP_POST, handleSaveConfig);
     server.on("/addwifi", HTTP_POST, handleAddWiFi);
+    server.on("/listwifi", HTTP_GET, handleListWiFi);
     server.on("/removewifi", HTTP_POST, handleRemoveWiFi);
+    server.on("/savebackup", HTTP_POST, handleSaveBackupConfig);
     server.on("/manualconfig", handleManualConfig);
     server.on("/logout", handleLogout);
     server.on("/factoryreset", handleFactoryReset);
@@ -465,6 +602,66 @@ void handleStopSim()
 // --- STRONA KONFIGURACYJNA ---
 void handleConfig()
 {
+    Serial.println(F("\n┌────────────────────────────────────────┐"));
+    Serial.println(F("│ [DISPLAY] GENERUJĘ HTML FORMULARZA     │"));
+    Serial.println(F("└────────────────────────────────────────┘"));
+
+    Serial.println(F("\n[DISPLAY] Wartości do wyświetlenia:"));
+    Serial.print(F("  • config.pingInterval: "));
+    Serial.println(config.pingInterval);
+    Serial.print(F("  • config.failLimit: "));
+    Serial.println(config.failLimit);
+    Serial.print(F("  • config.providerFailureLimit: "));
+    Serial.println(config.providerFailureLimit);
+    Serial.print(F("  • config.autoResetCountersHours: "));
+    Serial.println(config.autoResetCountersHours);
+    Serial.print(F("  • config.maxPingMs: "));
+    Serial.println(config.maxPingMs);
+    Serial.print(F("  • config.lagRetries: "));
+    Serial.println(config.lagRetries);
+    Serial.print(F("  • config.routerOffTime: "));
+    Serial.println(config.routerOffTime);
+    Serial.print(F("  • config.baseBootTime: "));
+    Serial.println(config.baseBootTime);
+    Serial.print(F("  • config.apMaxAttempts: "));
+    Serial.println(config.apMaxAttempts);
+    Serial.print(F("  • config.sleepWindowMs: "));
+    Serial.println(config.sleepWindowMs);
+    Serial.print(F("  • config.awakeWindowMs: "));
+    Serial.println(config.awakeWindowMs);
+    Serial.print(F("  • config.darkMode: "));
+    Serial.println(config.darkMode ? "ON" : "OFF");
+    Serial.print(F("  • config.ledBrightness: "));
+    Serial.println(config.ledBrightness);
+    Serial.print(F("  • config.host1: "));
+    Serial.println(config.host1);
+    Serial.print(F("  • config.host2: "));
+    Serial.println(config.host2);
+    Serial.print(F("  • config.gatewayOverride: "));
+    Serial.println(config.gatewayOverride);
+    Serial.print(F("  • config.useGatewayOverride: "));
+    Serial.println(config.useGatewayOverride ? "ON" : "OFF");
+    Serial.print(F("  • config.intermittentMode: "));
+    Serial.println(config.intermittentMode ? "ON" : "OFF");
+    Serial.print(F("  • config.watchdogEnabled: "));
+    Serial.println(config.watchdogEnabled ? "ON" : "OFF");
+    Serial.print(F("  • config.noWiFiBackoff: "));
+    Serial.println(config.noWiFiBackoff ? "ON" : "OFF");
+    Serial.print(F("  • config.bootLoopWindowSeconds: "));
+    Serial.println(config.bootLoopWindowSeconds);
+    Serial.print(F("  • config.adminUser: "));
+    Serial.println(config.adminUser);
+    Serial.println(F("\n[DISPLAY] Harmonogram resetów:"));
+    Serial.print(F("  • config.scheduledResetsEnabled: "));
+    Serial.println(config.scheduledResetsEnabled ? "ON" : "OFF");
+    for (int i = 0; i < 5; i++)
+    {
+        Serial.print(F("  • config.scheduledResetTimes["));
+        Serial.print(i);
+        Serial.print(F("]: "));
+        Serial.println(config.scheduledResetTimes[i].length() > 0 ? config.scheduledResetTimes[i] : "(pusty)");
+    }
+
     DIAG_PRINTLN(F("\n========== handleConfig START =========="));
     DIAG_PRINT(F("[CONFIG] Client IP: "));
     DIAG_PRINTLN(server.client().remoteIP().toString());
@@ -512,7 +709,8 @@ void handleConfig()
                         <span class="slider"></span>
                     </label>
                 </div>
-                <label style="font-size:0.95em;">Jednostki globalne: <select id="globalUnit" onchange="setGlobalUnit(this.value)" style="margin-left:5px; padding:4px;"><option value="1">ms</option><option value="1000" selected>s</option><option value="60000">min</option></select></label>
+                <label style="font-size:0.95em;">Jednostki globalne: <select id="globalUnit" name="globalUnit" onchange="setGlobalUnit(this.value)" style="margin-left:5px; padding:4px;"><option value="1">ms</option><option value="1000" selected>s</option><option value="60000">min</option></select></label>
+                <input type="hidden" id="globalUnitValue" name="globalUnitValue" value="1000">
             </div>
         </div>
 
@@ -595,7 +793,6 @@ void handleConfig()
             <h2>⚙️ Parametry Watchdog - Ustawienia zaawansowane</h2>
             <p style="font-size:0.9em; color:#666; margin-bottom:20px;">Parametry podzielone według scenariuszy - kliknij aby rozwinąć sekcję.</p>
 
-            <!-- Accordion Section 1: Podstawowe ustawienia -->
             <details class="accordion">
                 <summary><b>📡 1. Podstawowe ustawienia monitoringu</b></summary>
                 <div class="accordion-content">
@@ -656,7 +853,6 @@ void handleConfig()
                 </div>
             </details>
 
-            <!-- Accordion Section 2: Reset routera -->
             <details class="accordion">
                 <summary><b>🔄 2. Parametry resetu routera</b></summary>
                 <div class="accordion-content">
@@ -692,7 +888,6 @@ void handleConfig()
                 </div>
             </details>
 
-            <!-- Accordion Section 3: Safety Mode (Boot Loop) -->
             <details class="accordion">
                 <summary><b>🛡️ 3. Ochrona przed boot loop (Safety Mode)</b></summary>
                 <div class="accordion-content">
@@ -710,7 +905,6 @@ void handleConfig()
                 </div>
             </details>
 
-            <!-- Accordion Section 4: WiFi/AP Mode -->
             <details class="accordion">
                 <summary><b>📶 4. Problemy z WiFi i tryb AP</b></summary>
                 <div class="accordion-content">
@@ -781,7 +975,6 @@ void handleConfig()
                 </div>
             </details>
 
-            <!-- Accordion Section 5: Awarie dostawcy -->
             <details class="accordion">
                 <summary><b>🌐 5. Awarie dostawcy internetu</b></summary>
                 <div class="accordion-content">
@@ -803,7 +996,6 @@ void handleConfig()
                 </div>
             </details>
 
-            <!-- Accordion Section 6: Lag Detection -->
             <details class="accordion">
                 <summary><b>⏱️ 6. Detekcja opóźnień (Lag Watchdog)</b></summary>
                 <div class="accordion-content">
@@ -829,7 +1021,6 @@ void handleConfig()
                 </div>
             </details>
 
-            <!-- Accordion Section 7: Zaplanowane resety -->
             <details class="accordion">
                 <summary><b>📅 7. Zaplanowane resety i auto-reset liczników</b></summary>
                 <div class="accordion-content">
@@ -871,6 +1062,9 @@ void handleConfig()
             </details>
         </div>
     )rawliteral");
+
+    server.sendContent(html);
+    html = "";
 
     // --- Watchdog Control ---
     html += F(R"rawliteral(
@@ -955,92 +1149,23 @@ void handleConfig()
                 </div>
             </div>
         </details>
-
-        <details class="section accordion">
-            <summary><h2>📶 Sieci WiFi</h2></summary>
-            <div class="accordion-content">
-                <label for="ssid">Nazwa sieci (SSID):</label>
-                <input type="text" id="ssid" name="ssid" placeholder="Wprowadź SSID sieci WiFi">
-                
-                <label for="wifipass">Hasło sieci:</label>
-                <div class="time-group">
-                    <input type="password" id="wifipass" name="pass" placeholder="Hasło WiFi">
-                    <button type="button" onclick="togglePassword('wifipass')">👁️</button>
-                </div>
-                
-                <label for="networkType">Typ sieci: <span class="tooltip">?<span class="tooltiptext">Główna: domyślna sieć. Rezerwowa: włącza się gdy główna zawiedzie (wymaga drugiego routera i przekaźnika).</span></span></label>
-                <select id="networkType" name="networkType">
-                    <option value="0">🟢 Główna (Primary)</option>
-                    <option value="1">🔴 Rezerwowa (Backup)</option>
-                </select>
-                
-                <div style="text-align: center; margin-top: 15px;">
-                    <button type="button" onclick="addWiFiNetwork()" style="padding: 10px 20px; background-color: #007bff;">Zapisz/dodaj sieć WiFi</button>
-                </div>
-                
-                <h4 style="margin-top: 25px;">Zapisane sieci:</h4>
-                <div class="wifi-list" id="wifiList">
     )rawliteral");
+
     server.sendContent(html);
-    html = "";
-
-    // Lista sieci
-    for (int i = 0; i < wielkoscTablicy; i++)
-    {
-        if (tablica[i].ssid.length() > 0)
-        {
-            String networkTypeLabel = (tablica[i].networkType == 1) ? "🔴 Rezerwowa" : "🟢 Główna";
-            html += F("<div class='wifi-item'>");
-            html += F("<span>");
-            html += tablica[i].ssid;
-            html += F(" <small style='color: var(--fg); opacity: 0.7;'>[");
-            html += networkTypeLabel;
-            html += F("]</small>");
-            html += F("</span>");
-            html += F("<form action='/removewifi' method='POST' style='display:inline;'>");
-            html += F("<input type='hidden' name='index' value='");
-            html += i;
-            html += F("'>");
-            html += F("<button type='submit'>Usuń</button>");
-            html += F("</form>");
-            html += F("</div>");
-        }
-    }
-
-    html += F(R"rawliteral(
-                </div>
-
-                <!-- Sekcja konfiguracji sieci rezerwowej -->
-                <h4 style="margin-top: 25px; margin-bottom: 15px;">⚙️ Konfiguracja sieci rezerwowej (Backup Network)</h4>
-                <div style="background:var(--inp); padding:12px; border:1px solid var(--brd); border-radius:6px; margin-bottom:15px;">
-                    <div class="switch-wrap" style="justify-content: flex-start; margin-bottom:12px;">
-                        <label class="switch">
-                            <input type="checkbox" id="enableBackupNetwork" name="enableBackupNetwork" )rawliteral");
-    html += config.enableBackupNetwork ? "checked" : "";
-    html += F(R"rawliteral(>
-                            <span class="slider"></span>
-                        </label>
-                        <span style="margin-left: 10px;">Włącz sieć rezerwową (wymaga drugiego routera i przekaźnika GPIO)</span>
-                    </div>
-
-                    <label for="backupNetworkFailLimit">Limit błędów sieci rezerwowej: <span class="tooltip">?<span class="tooltiptext">Ile błędów w sieci rezerwowej zanim powróci do głównej sieci.</span></span></label>
-                    <input type="number" id="backupNetworkFailLimit" name="backupNetworkFailLimit" value=")rawliteral");
-    html += config.backupNetworkFailLimit;
-    html += F(R"rawliteral(" min="1" max="10" required>
-
-                    <label for="backupNetworkRetryInterval" style="margin-top:10px;">Interwał ponownej próby (ms): <span class="tooltip">?<span class="tooltiptext">Jak długo czekać między próbami przełączenia z powrotem na główną sieć.</span></span></label>
-                    <input type="number" id="backupNetworkRetryInterval" name="backupNetworkRetryInterval" value=")rawliteral");
-    html += config.backupNetworkRetryInterval;
-    html += F(R"rawliteral(" min="1000" required>
-
-                    <label for="pinRelayBackup" style="margin-top:10px;">Pin GPIO dla przekaźnika sieci rezerwowej: <span class="tooltip">?<span class="tooltiptext">GPIO pin sterujący przekaźnikiem drugiego routera (np. D8 = GPIO15).</span></span></label>
-                    <input type="number" id="pinRelayBackup" name="pinRelayBackup" value=")rawliteral");
-    html += config.pinRelayBackup;
-    html += F(R"rawliteral(" min="0" max="16">
-                </div>
+    html = F(R"rawliteral(
+        <details class="section accordion">
+            <summary style="cursor:pointer;" onclick="event.preventDefault(); window.location.href='/wifi';">
+                <h2 style="margin:0;">📶 Sieci WiFi — kliknij, aby otworzyć</h2>
+            </summary>
+            <div class="accordion-content">
+                <p>Konfiguracja WiFi została przeniesiona do osobnej strony.</p>
+                <button type="button" onclick="window.location.href='/wifi';" style="padding: 10px 18px; background-color: #007bff;">Otwórz konfigurację WiFi</button>
             </div>
         </details>
 
+    )rawliteral");
+    server.sendContent(html);
+    html = F(R"rawliteral(
         <details class="section accordion">
             <summary><h2>🔒 Zabezpieczenia (Panel i OTA)</h2></summary>
             <div class="accordion-content">
@@ -1068,6 +1193,9 @@ void handleConfig()
             <h3>Diagnostyka i Testy</h3>
                 <p>Scenariusze testowe pozwalają sprawdzić reakcję urządzenia.</p>
                 <p style="font-size:0.9em; color:#666; margin-top:5px;">ℹ️ Symulacje kończą się automatycznie po 3 resetach lub można je zakończyć ręcznie przyciskiem "Symuluj powrót internetu".</p>
+    )rawliteral");
+    server.sendContent(html);
+    html = F(R"rawliteral(
                 
                 <div style="margin-bottom: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 5px; background-color: var(--inp);">
                     <b>Status symulacji:</b> 
@@ -1105,6 +1233,7 @@ void handleConfig()
                 <h3 style="margin-top: 30px;">Inne opcje</h3>
                 <div style="display:flex; flex-wrap:wrap; gap:10px;">
                     <a href="/"><button type="button">Powrót do statusu</button></a>
+                    <a href="/wifi" onclick="console.log('Kliknięto przycisk konfiguracji WiFi'); console.log('Przejście do /wifi'); return true;"><button type="button" style="background-color: #6f42c1;">📶 Konfiguracja sieci WiFi</button></a>
                     <a href="/reset" onclick="return confirm('Czy na pewno chcesz zresetować router?')"><button type="button" style="background-color:#ff6b6b;">Reset routera</button></a>
                     <a href="/reboot" onclick="return confirm('Czy na pewno chcesz zrestartować urządzenie (ESP)?')"><button type="button" style="background-color:#dc3545;">Restart urządzenia (ESP)</button></a>
                     <a href="/downloadlogs"><button type="button" style="background-color: #007bff;">Pobierz logi</button></a>
@@ -1128,7 +1257,11 @@ void handleConfig()
     html += F(R"rawliteral(</b></div>
         </div>
     </div>
+    )rawliteral");
+    server.sendContent(html);
+    html = F(R"rawliteral(
     <script>
+    console.log("Config page script loaded");
     const SESSION_MS = 300000; // 5 minut
     const loadTime = Date.now();
     let countdownInterval = null;
@@ -1177,6 +1310,7 @@ void handleConfig()
     
     // Funkcja do dodawania sieci WiFi
     function addWiFiNetwork() {
+        console.log("addWiFiNetwork called");
         const ssid = document.getElementById('ssid').value.trim();
         const pass = document.getElementById('wifipass').value;
         const networkType = document.getElementById('networkType').value;
@@ -1221,10 +1355,36 @@ void handleConfig()
             alert(error.message || 'Wystąpił błąd podczas komunikacji z urządzeniem.');
         });
     }
+
+    function removeWiFiNetwork(index) {
+        const formData = new URLSearchParams();
+        formData.append('index', index);
+
+        fetch('/removewifi', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            credentials: 'include',
+            body: formData.toString()
+        })
+        .then(async response => {
+            const message = await response.text();
+            if (!response.ok) {
+                throw new Error(message || 'Błąd podczas usuwania sieci WiFi.');
+            }
+
+            isDirty = false;
+            alert(message || 'Sieć została usunięta.');
+            window.location.reload();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert(error.message || 'Wystąpił błąd podczas komunikacji z urządzeniem.');
+        });
+    }
     
     function initFields() {
-        // Przywróć stan trybu ciemnego będzie obsłużony przez initTheme()
-        // (usunięto duplikację kodu)
         // Przywróć pola czasu
         initTimeField('pingInterval', )rawliteral");
     html += config.pingInterval;
@@ -1250,35 +1410,93 @@ void handleConfig()
         initTimeField('maxPingMs', )rawliteral");
     html += config.maxPingMs;
     html += F(R"rawliteral());
-        function toggleDutyFields() {
-            const intermittent = document.querySelector('input[name="workMode"][value="intermittent"]').checked;
-            const dutyDiv = document.getElementById('dutyFields');
-            
-            if (intermittent) {
-                // Włącz sekcję
-                dutyDiv.style.display = 'block';
-                dutyDiv.style.opacity = '1';
-                dutyDiv.style.pointerEvents = 'auto';
-                dutyDiv.style.filter = 'none';
-            } else {
-                // Wyłącz sekcję wizualnie
-                dutyDiv.style.display = 'none';
-                dutyDiv.style.opacity = '0.4';
-                dutyDiv.style.pointerEvents = 'none';
-                dutyDiv.style.filter = 'grayscale(1)';
+        initTimeField('apBackoffMs', )rawliteral");
+    html += config.apBackoffMs;
+    html += F(R"rawliteral());
+        initTimeField('dhcpTimeoutMs', )rawliteral");
+    html += config.dhcpTimeoutMs;
+    html += F(R"rawliteral());
+        
+        // Załaduj harmonogram resetów
+        console.log('[JS] Wczytywanie harmonogramu resetów...');
+        for (let i = 0; i < 5; i++) {
+            let field = document.getElementById('resetTime' + i);
+            if (field) {
+                console.log('[JS] resetTime' + i + ' = "' + field.value + '"');
             }
-            
-            // Włącz/wyłącz pola
-            const inputs = dutyDiv.querySelectorAll('input, select');
-            inputs.forEach(input => {
-                input.disabled = !intermittent;
-            });
         }
-        document.querySelectorAll('input[name="workMode"]').forEach(r => r.addEventListener('change', toggleDutyFields));
+        
+        // ========== AKORDEONY - TYLKO JEDNA ZAKŁADKA NARAZ ==========
+        var accordions = document.querySelectorAll('.accordion');
+        accordions.forEach(accordion => {
+            accordion.addEventListener('toggle', function(event) {
+                if (this.open) {
+                    accordions.forEach(other => {
+                        if (other !== this) {
+                            other.open = false;
+                        }
+                    });
+                }
+            });
+        });
+        console.log('[JS] Akordeony zainicjalizowane - znaleziono ' + accordions.length + ' zakładek');
+        
         toggleDutyFields();
-        // Wywołaj initTheme aby przywrócić zapisany tryb
         initTheme();
     }
+    
+    function toggleDutyFields() {
+        const intermittent = document.querySelector('input[name="workMode"][value="intermittent"]').checked;
+        const dutyDiv = document.getElementById('dutyFields');
+        
+        if (intermittent) {
+            dutyDiv.style.display = 'block';
+            dutyDiv.style.opacity = '1';
+            dutyDiv.style.pointerEvents = 'auto';
+            dutyDiv.style.filter = 'none';
+        } else {
+            dutyDiv.style.display = 'none';
+            dutyDiv.style.opacity = '0.4';
+            dutyDiv.style.pointerEvents = 'none';
+            dutyDiv.style.filter = 'grayscale(1)';
+        }
+        
+        const inputs = dutyDiv.querySelectorAll('input, select');
+        inputs.forEach(input => {
+            input.disabled = !intermittent;
+        });
+    }
+    
+    // Event listeners i inicjalizacja
+    document.querySelectorAll('input[name="workMode"]').forEach(r => r.addEventListener('change', toggleDutyFields));
+    toggleDutyFields();
+    initTheme();
+    
+    // ========== GWARANCJA AKTUALIZACJI PÓL UKRYTYCH PRZED SUBMIT ==========
+    // To rozwiązanie zapewnia, że pole ukryte (hidden) będzie zawsze mieć
+    // prawidłową wartość zanim formularz zostanie wysłany do serwera.
+    // Zapobiega problemowi "stare wartości po zapisie".
+    document.getElementById('configForm').addEventListener('submit', function(e) {
+        var timeFields = ['pingInterval', 'routerOffTime', 'baseBootTime', 'noWiFiTimeout',
+                         'apConfigTimeout', 'awakeWindowMs', 'sleepWindowMs', 'maxPingMs',
+                         'apBackoffMs', 'dhcpTimeoutMs'];
+        
+        timeFields.forEach(function(fieldId) {
+            var dispInput = document.getElementById(fieldId + '_disp');
+            var unitSelect = document.getElementById(fieldId + '_unit');
+            var hiddenInput = document.getElementById(fieldId);
+            
+            if (dispInput && unitSelect && hiddenInput) {
+                var disp = parseFloat(dispInput.value) || 0;
+                var unit = parseInt(unitSelect.value) || 1;
+                var valueMs = Math.round(disp * unit);
+                hiddenInput.value = valueMs;
+            }
+        });
+        
+        // Formularz może być wysłany z gwarancją że wszystkie pola są aktualne
+        return true;
+    });
     </script>
 </body>
 </html>
@@ -1286,12 +1504,16 @@ void handleConfig()
 
     server.sendContent(html);
     server.sendContent(""); // Koniec transmisji
+
+    Serial.println(F("\n[DISPLAY] ✅ Formularz HTML wygenerowany i wysłany"));
+    Serial.println(F("  JavaScript initFields() będzie uzupełniać pola wartościami"));
 }
 
 void handleSaveConfig()
 {
     if (!checkAuth())
         return;
+    void handleListWiFi();
 
     if (server.method() != HTTP_POST)
     {
@@ -1317,6 +1539,176 @@ void handleSaveConfig()
     redirectTo(server, "/config");
 }
 
+void handleWiFiPage()
+{
+    if (!checkAuth())
+        return;
+
+    Serial.println("[WEBSERVER] handleWiFiPage: Strona konfiguracji WiFi");
+
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.sendHeader("Pragma", "no-cache");
+    server.sendHeader("Expires", "0");
+
+    sendHtmlHeader(server, "Sieci WiFi - Strażnik Internetu", config.darkMode);
+
+    String html;
+    html.reserve(2048);
+
+    html += F("</head><body><div class='container'>");
+    html += F("<div style='text-align:center; margin-bottom:10px;'>");
+    html += F("<h1 style='margin:0;'>📶 Konfiguracja sieci WiFi</h1>");
+    html += F("</div>");
+
+    html += F("<div class='section' style='margin-top:10px;'>");
+    html += F("<label for='ssid'>Nazwa sieci (SSID):</label>");
+    html += F("<input type='text' id='ssid' name='ssid' placeholder='Wprowadź SSID sieci WiFi'>");
+
+    html += F("<label for='wifipass'>Hasło sieci:</label>");
+    html += F("<div class='time-group'>");
+    html += F("<input type='password' id='wifipass' name='pass' placeholder='Hasło WiFi'>");
+    html += F("<button type='button' onclick=\"togglePassword('wifipass')\">👁️</button>");
+    html += F("</div>");
+
+    html += F("<label for='networkType'>Typ sieci:</label>");
+    html += F("<select id='networkType' name='networkType'>");
+    html += F("<option value='0'>🟢 Główna (Primary)</option>");
+    html += F("<option value='1'>🔴 Rezerwowa (Backup)</option>");
+    html += F("</select>");
+    html += F("</div>");
+
+    html += F("<div style='text-align:center; margin-top:20px; display:flex; flex-direction:column; gap:14px; align-items:center;'>");
+    html += F("<button type='button' id='saveWiFi' style='padding:12px 26px; background-color:#007bff;'>💾 Zapisz sieć WiFi</button>");
+
+    html += F("<div class='section' style='width:100%;'>");
+    html += F("<h3 style='text-align:center;'>Zapisane sieci WiFi</h3>");
+    html += F("<div id='wifiList' style='display:flex; flex-direction:column; gap:8px;'></div>");
+    html += F("</div>");
+
+    html += F("<div style='display:flex; gap:10px; flex-wrap:wrap; justify-content:center;'>");
+    html += F("<a href='/config'><button type='button'>⟵ Powrót do konfiguracji</button></a>");
+    html += F("<a href='/'><button type='button'>Status</button></a>");
+    html += F("</div>");
+    html += F("</div>");
+
+    html += F("</div>");
+
+    html += F(R"rawliteral(
+<script>
+function togglePassword(id){
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.type = el.type==='password' ? 'text' : 'password';
+}
+
+function saveWiFi(){
+    const ssid=document.getElementById('ssid').value.trim();
+    const pass=document.getElementById('wifipass').value;
+    const networkType=document.getElementById('networkType').value;
+    if(!ssid){alert('Podaj nazwę sieci (SSID).'); return;}
+    const body=`ssid=${encodeURIComponent(ssid)}&pass=${encodeURIComponent(pass)}&networkType=${networkType}`;
+    fetch('/addwifi',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},credentials:'include',body})
+    .then(r=>r.text().then(t=>({ok:r.ok,text:t})))
+    .then(res=>{
+        if(!res.ok) throw new Error(res.text||'Błąd zapisu sieci WiFi.');
+        alert(res.text||'Sieć WiFi zapisana.');
+        loadWiFiList();
+    })
+    .catch(e=>{
+        console.error(e);
+        alert(e.message||'Błąd zapisu sieci WiFi.');
+    });
+}
+
+function renderWiFiList(items){
+    const wrap=document.getElementById('wifiList');
+    if(!wrap) return;
+    wrap.innerHTML='';
+    if(!items || !items.length){
+        wrap.innerHTML = "<p style='text-align:center; opacity:0.7;'>Brak zapisanych sieci</p>";
+        return;
+    }
+    items.forEach(item=>{
+        const div=document.createElement('div');
+        const color=item.networkType==1? '#ff6b6b':'#28a745';
+        const label=item.networkType==1? '🔴 Rezerwowa':'🟢 Główna';
+        div.style.cssText='display:flex; justify-content:space-between; align-items:center; border-left:4px solid '+color+'; padding:8px; background:var(--inp); border:1px solid var(--brd); border-radius:6px; min-height:46px;';
+        div.innerHTML = `<span><b>${item.ssid}</b> <small style="opacity:0.7;">[${label}]</small></span>`;
+        const btn=document.createElement('button');
+        btn.textContent='🗑️ Usuń';
+        btn.style.backgroundColor='#dc3545';
+        btn.onclick=()=>removeWiFi(item.index);
+        div.appendChild(btn);
+        wrap.appendChild(div);
+    });
+}
+
+function loadWiFiList(){
+    fetch('/listwifi',{method:'GET',credentials:'include'})
+    .then(r=>r.json())
+    .then(data=>renderWiFiList(data))
+    .catch(e=>{
+        console.error(e);
+        const wrap=document.getElementById('wifiList');
+        if(wrap) wrap.innerHTML="<p style='color:red; text-align:center;'>Błąd pobierania listy</p>";
+    });
+}
+
+function removeWiFi(idx){
+    if(!confirm('Usunąć tę sieć?')) return;
+    const body=`index=${idx}`;
+    fetch('/removewifi',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},credentials:'include',body})
+    .then(r=>r.text().then(t=>({ok:r.ok,text:t})))
+    .then(res=>{
+        if(!res.ok) throw new Error(res.text||'Błąd usuwania sieci.');
+        alert(res.text||'Sieć usunięta.');
+        loadWiFiList();
+    })
+    .catch(e=>{
+        console.error(e);
+        alert(e.message||'Błąd usuwania sieci.');
+    });
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+    const btn=document.getElementById('saveWiFi');
+    if(btn){btn.addEventListener('click',saveWiFi);}
+    loadWiFiList();
+});
+</script>
+</body></html>
+)rawliteral");
+
+    server.sendContent(html);
+    Serial.println("[WEBSERVER] handleWiFiPage: Zakończono wysyłanie");
+}
+
+void handleSaveBackupConfig()
+{
+    if (!checkAuth())
+        return;
+    if (server.method() != HTTP_POST)
+    {
+        server.send(405, "text/plain", "Method Not Allowed");
+        return;
+    }
+
+    config.enableBackupNetwork = server.hasArg("enableBackupNetwork");
+    config.backupNetworkFailLimit = constrain(server.arg("backupNetworkFailLimit").toInt(), 1, 10);
+    config.backupNetworkRetryInterval = server.arg("backupNetworkRetryInterval").toInt();
+    if (config.backupNetworkRetryInterval < 1000)
+        config.backupNetworkRetryInterval = 1000;
+    config.pinRelayBackup = server.arg("pinRelayBackup").toInt();
+
+    if (!saveConfig())
+    {
+        server.send(500, "text/plain", "Błąd zapisu konfiguracji sieci rezerwowej.");
+        return;
+    }
+
+    server.send(200, "text/plain", "Zapisano ustawienia sieci rezerwowej.");
+}
+
 void handleAddWiFi()
 {
     if (!checkAuth())
@@ -1332,23 +1724,57 @@ void handleAddWiFi()
     String pass = server.arg("pass");
     int networkType = server.hasArg("networkType") ? server.arg("networkType").toInt() : 0;
 
+    Serial.printf("[WEBSERVER] handleAddWiFi: SSID='%s', Type=%d\n", ssid.c_str(), networkType);
+    logEvent("WiFi: Proba dodania sieci: " + ssid);
+
     if (ssid.length() == 0)
     {
         server.send(400, "text/plain", "Podaj nazwę sieci (SSID).");
         return;
     }
 
-    uaktualnijTablicePlik(ssid, pass);
-
-    // Ustawienie typu sieci dla ostatnio dodanej
-    if (tablica[0].ssid == ssid)
-    {
-        tablica[0].networkType = networkType;
-        zapiszTabliceDoPliku(WIFI_CONFIG_FILES, tablica);
-    }
+    uaktualnijTablicePlik(ssid, pass, networkType);
 
     String successMsg = "Sieć " + ssid + " (" + (networkType == 1 ? "rezerwowa" : "główna") + ") została zapisana.";
     server.send(200, "text/plain", successMsg);
+}
+
+void handleListWiFi()
+{
+    if (!checkAuth())
+        return;
+
+    server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    server.sendHeader("Pragma", "no-cache");
+    server.sendHeader("Expires", "0");
+
+    String json = "[";
+    bool first = true;
+    for (int i = 0; i < wielkoscTablicy; i++)
+    {
+        if (tablica[i].ssid.length() == 0)
+            continue;
+
+        String esc = tablica[i].ssid;
+        esc.replace("\\", "\\\\");
+        esc.replace("\"", "\\\"");
+
+        if (!first)
+            json += ',';
+        first = false;
+
+        json += '{';
+        json += "\"index\":";
+        json += i;
+        json += ",\"ssid\":\"";
+        json += esc;
+        json += "\",\"networkType\":";
+        json += tablica[i].networkType;
+        json += '}';
+    }
+    json += ']';
+
+    server.send(200, "application/json", json);
 }
 
 void handleRemoveWiFi()
@@ -1367,8 +1793,12 @@ void handleRemoveWiFi()
         tablica[index].ssid = "";
         tablica[index].pass = "";
         zapiszTabliceDoPliku(WIFI_CONFIG_FILES, tablica);
+        server.send(200, "text/plain", "Sieć została usunięta z listy.");
     }
-    sendSuccessPage(server, "✅ Sieć usunięta", "Sieć została usunięta z listy.", "/config", "Powrót", config.darkMode);
+    else
+    {
+        server.send(400, "text/plain", "Nieprawidłowy indeks sieci.");
+    }
 }
 
 void handleUpdatePage()

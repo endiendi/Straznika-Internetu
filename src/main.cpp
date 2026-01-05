@@ -15,6 +15,7 @@
 #include "constants.h"
 #include "webserver.h"
 #include "watchdog.h"
+#include "serial_handler.h" // Obsługa poleceń Serial Monitor
 
 // Ustawienie nazwy sieciowej urządzenia (adres: http://straznik.local)
 const char *NAZWA_ESP = "straznik";
@@ -719,6 +720,9 @@ void setup()
 void loop()
 {
   ESP.wdtFeed();
+
+  // Obsługa poleceń z Serial Monitor
+  handleSerialCommands();
 
   // === SAFE MODE - Boot Loop Protection ===
   if (safeMode)

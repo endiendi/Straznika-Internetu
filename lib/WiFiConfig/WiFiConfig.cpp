@@ -6,8 +6,8 @@
 // WebServer server(80);
 #endif
 
-const char *NAZWA_ESP __attribute__((weak)) = "mojeesp";                  // Domyślna wartość
-const char *WIFI_CONFIG_FILES __attribute__((weak)) = "/wifi_config.txt"; // Domyślna wartość
+const char *NAZWA_ESP __attribute__((weak)) = "mojeesp";                     // Domyślna wartość
+const char *WIFI_CONFIG_FILES __attribute__((weak)) = "/wifi_config_v2.txt"; // Domyślna wartość
 // extern const int wielkoscTablicy;
 WiFiNetwork tablica[WIELKOSC_TABLICY];
 // WiFiNetwork tablica[wielkoscTablicy];
@@ -53,7 +53,7 @@ bool initLittleFS()
     return true;
 }
 
-void zapiszDoTablicy(const String &ssid, const String &pass);
+void zapiszDoTablicy(const String &ssid, const String &pass, int networkType);
 void zapiszTabliceDoPliku(const char *nazwaPliku, WiFiNetwork sieci[]);
 void wyczyscTablice(WiFiNetwork sieci[], int wielkoscTablicy);
 
@@ -130,7 +130,7 @@ void PolaczZWiFi(WiFiNetwork sieci[], void (*ledHandler)(), int filterNetworkTyp
             if (WiFi.status() == WL_CONNECTED)
             {
                 Serial.printf("\nDane sieci z którą się połączyło ssid %s hasło %s \n", ssid, password);
-                uaktualnijTablicePlik(ssid, password);
+                uaktualnijTablicePlik(ssid, password, sieci[i].networkType);
                 // zapiszDoTablicy(ssid, password);
                 // zapiszTabliceDoPliku(WIFI_CONFIG_FILES, tablica);
                 Serial.println("\nPołączono z WiFi!");
@@ -154,12 +154,13 @@ void PolaczZWiFi(WiFiNetwork sieci[], void (*ledHandler)(), int filterNetworkTyp
         Serial.println("\nTryb testowy, nie połączono z WiFi");
     }
 }
-void uaktualnijTablicePlik(const String &ssid, const String &pass)
+void uaktualnijTablicePlik(const String &ssid, const String &pass, int networkType)
 {
-    zapiszDoTablicy(ssid, pass);
+    Serial.printf("[WiFiConfig] uaktualnijTablicePlik: SSID='%s', Type=%d\n", ssid.c_str(), networkType);
+    zapiszDoTablicy(ssid, pass, networkType);
     zapiszTabliceDoPliku(WIFI_CONFIG_FILES, tablica);
 }
-void zapiszDoTablicy(const String &ssid, const String &pass)
+void zapiszDoTablicy(const String &ssid, const String &pass, int networkType)
 {
     int liczbaZajetych = liczbaZajetychMiejscTablicy(tablica, wielkoscTablicy);
     int indexIstniejacy = -1;
@@ -183,6 +184,7 @@ void zapiszDoTablicy(const String &ssid, const String &pass)
             }
             tablica[0].ssid = ssid;
             tablica[0].pass = pass;
+            tablica[0].networkType = networkType;
             // Serial.println("2");
             return;
         }
@@ -207,6 +209,7 @@ void zapiszDoTablicy(const String &ssid, const String &pass)
 
         tablica[0].ssid = ssid;
         tablica[0].pass = pass;
+        tablica[0].networkType = networkType;
         // Serial.println("5");
     }
 }
@@ -250,6 +253,7 @@ void zapiszTabliceDoPliku(const char *nazwaPliku, WiFiNetwork sieci[])
     {
         plik.println(sieci[i].ssid);
         plik.println(sieci[i].pass);
+        plik.println(sieci[i].networkType);
     }
     plik.close();
     Serial.println("Tablica zapisana.");
@@ -262,22 +266,75 @@ void trim(String &str)
 
 void odczytajTabliceZPliku(const char *nazwaPliku)
 {
-    File plik = LittleFS.open(nazwaPliku, "r");
-    if (!plik)
+    // 1. Próba odczytu nowego pliku (v2)
+    if (LittleFS.exists(nazwaPliku))
     {
-        Serial.println("Błąd odczytu pliku!");
-        return;
+        File plik = LittleFS.open(nazwaPliku, "r");
+        if (plik)
+        {
+            int liczbaZajetych = 0;
+            while (plik.available() && liczbaZajetych < wielkoscTablicy)
+            {
+                String ssid = plik.readStringUntil('\n');
+                ssid.trim();
+                if (ssid.length() == 0)
+                    continue;
+
+                tablica[liczbaZajetych].ssid = ssid;
+
+                tablica[liczbaZajetych].pass = plik.readStringUntil('\n');
+                tablica[liczbaZajetych].pass.trim();
+
+                String typeStr = plik.readStringUntil('\n');
+                typeStr.trim();
+                tablica[liczbaZajetych].networkType = typeStr.toInt();
+
+                liczbaZajetych++;
+            }
+            plik.close();
+            Serial.println("Wczytano konfigurację WiFi (v2).");
+            return;
+        }
     }
-    int liczbaZajetych = 0;
-    while (plik.available() && liczbaZajetych < wielkoscTablicy)
+
+    // 2. Fallback: Sprawdź stary plik (v1) i wykonaj migrację
+    const char *oldFile = "/wifi_config.txt";
+    if (LittleFS.exists(oldFile))
     {
-        tablica[liczbaZajetych].ssid = plik.readStringUntil('\n');
-        tablica[liczbaZajetych].ssid.trim();
+        Serial.println("Wykryto stary plik konfiguracji (v1). Migracja do v2...");
+        File plik = LittleFS.open(oldFile, "r");
+        if (plik)
+        {
+            int liczbaZajetych = 0;
+            while (plik.available() && liczbaZajetych < wielkoscTablicy)
+            {
+                String ssid = plik.readStringUntil('\n');
+                ssid.trim();
+                if (ssid.length() == 0)
+                    continue;
 
-        tablica[liczbaZajetych].pass = plik.readStringUntil('\n');
-        tablica[liczbaZajetych].pass.trim();
+                tablica[liczbaZajetych].ssid = ssid;
 
-        liczbaZajetych++;
+                tablica[liczbaZajetych].pass = plik.readStringUntil('\n');
+                tablica[liczbaZajetych].pass.trim();
+
+                // Stary format: brak typu, ustawiamy domyślny (0 = Główna)
+                tablica[liczbaZajetych].networkType = 0;
+
+                liczbaZajetych++;
+            }
+            plik.close();
+
+            // Zapisz w nowym formacie
+            zapiszTabliceDoPliku(nazwaPliku, tablica);
+
+            // Zmień nazwę starego pliku (backup)
+            LittleFS.rename(oldFile, "/wifi_config.txt.bak");
+
+            Serial.println("Migracja zakończona sukcesem.");
+            return;
+        }
     }
-    plik.close();
+
+    Serial.println("Brak zapisanych sieci WiFi (lub błąd odczytu).");
 }

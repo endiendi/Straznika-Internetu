@@ -337,6 +337,8 @@ function updateHidden(id) {
     document.getElementById(id).value = Math.round(disp * unit);
 }
 function initTimeField(id, valMs) {
+    console.log('[JS] initTimeField(' + id + ', ' + valMs + ' ms)');
+    
     var unit = 1;
     if (valMs > 0) {
         if (valMs % 60000 == 0) unit = 60000;
@@ -345,6 +347,8 @@ function initTimeField(id, valMs) {
     document.getElementById(id + '_unit').value = unit;
     document.getElementById(id + '_disp').value = valMs / unit;
     document.getElementById(id).value = valMs;
+    
+    console.log('[JS] ' + id + '_disp = ' + (valMs / unit) + ', unit = ' + unit);
 }
 function convertUnit(id) {
     var valMs = document.getElementById(id).value;
@@ -355,7 +359,7 @@ function convertUnit(id) {
 }
 function setGlobalUnit(unit) {
     // Zmień jednostki we wszystkich fieldach
-    var fieldIds = ['pingInterval', 'routerOffTime', 'baseBootTime', 'noWiFiTimeout', 'apConfigTimeout', 'awakeWindowMs', 'sleepWindowMs', 'maxPingMs'];
+    var fieldIds = ['pingInterval', 'routerOffTime', 'baseBootTime', 'noWiFiTimeout', 'apConfigTimeout', 'awakeWindowMs', 'sleepWindowMs', 'maxPingMs', 'apBackoffMs', 'dhcpTimeoutMs'];
     fieldIds.forEach(id => {
         var unitEl = document.getElementById(id + '_unit');
         if (unitEl) {
@@ -363,6 +367,11 @@ function setGlobalUnit(unit) {
             convertUnit(id);
         }
     });
+    // Zapisz wybraną jednostkę w ukrytym polu
+    var globalUnitInput = document.getElementById('globalUnitValue');
+    if (globalUnitInput) {
+        globalUnitInput.value = unit;
+    }
 }
 function validateSleepTimes() {
     // Walidacja czasów uśpienia: min 5 min, max 60 min

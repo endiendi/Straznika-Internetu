@@ -17,6 +17,33 @@ Biblioteka **WiFiConfig** została rozszerzona w wersji **1.1.0** o funkcjonalno
 
 ---
 
+## v1.2.0 (2026-01-05) - Trwałość Typu Sieci (Persistence)
+
+### Nowe funkcjonalności
+
+#### 1. Zapisywanie typu sieci do pliku
+**Plik:** `WiFiConfig.cpp`
+
+Zaktualizowano mechanizm zapisu i odczytu, aby uwzględniał typ sieci (Główna/Rezerwowa).
+- **Format pliku:** Teraz zapisywane są 3 linie dla każdej sieci: SSID, Hasło, Typ.
+- **Nowa nazwa pliku:** Domyślny plik konfiguracyjny to teraz `/wifi_config_v2.txt`. Zmiana nazwy zapobiega błędom przy odczycie starych plików (v1) przez nową wersję biblioteki.
+
+#### 2. Aktualizacja funkcji zarządzających tablicą
+**Plik:** `WiFiConfig.h`, `WiFiConfig.cpp`
+
+Zaktualizowano sygnatury funkcji, aby obsługiwały `networkType`:
+```cpp
+void uaktualnijTablicePlik(const String &ssid, const String &pass, int networkType = 0);
+void zapiszDoTablicy(const String &ssid, const String &pass, int networkType);
+```
+
+**Zmiany:**
+- Funkcja `uaktualnijTablicePlik` przyjmuje teraz opcjonalny parametr `networkType` (domyślnie 0).
+- Funkcja `zapiszDoTablicy` zapisuje typ sieci w strukturze w pamięci RAM.
+- Funkcja `odczytajTabliceZPliku` parsuje trzecią linię z pliku (typ sieci).
+
+---
+
 ## v1.1.0 (2026-01-04) - Network Type Filtering
 
 ### Nowe funkcjonalności
@@ -152,6 +179,33 @@ The **WiFiConfig** library has been extended in version **1.1.0** with **network
 - ✅ **No side effects** – change only affects function input parameters
 - ✅ **Diagnostics** – logging of each skipped network
 
+## v1.2.0 (2026-01-05) - Network Type Persistence
+
+### New Features
+
+#### 1. Saving Network Type to File
+**File:** `WiFiConfig.cpp`
+
+The save and read mechanism has been updated to include the network type (Primary/Backup).
+- **File Format:** Now 3 lines are saved for each network: SSID, Password, Type.
+- **New Filename:** The default config file is now `/wifi_config_v2.txt`. This renaming prevents errors when reading old files (v1) with the new library version.
+
+#### 2. Array Management Functions Update
+**File:** `WiFiConfig.h`, `WiFiConfig.cpp`
+
+Function signatures have been updated to support `networkType`:
+```cpp
+void uaktualnijTablicePlik(const String &ssid, const String &pass, int networkType = 0);
+void zapiszDoTablicy(const String &ssid, const String &pass, int networkType);
+```
+
+**Changes:**
+- `uaktualnijTablicePlik` now accepts an optional `networkType` parameter (default 0).
+- `zapiszDoTablicy` saves the network type in the RAM structure.
+- `odczytajTabliceZPliku` parses the third line from the file (network type).
+
+---
+
 ## v1.1.0 (2026-01-04) - Network Type Filtering
 
 ### New Features
@@ -267,4 +321,3 @@ This library supports the **Backup Network** functionality implemented in the ma
 - `WiFiConfig.cpp` – remaining logic unchanged
 - Content of `zapiszTabliceDoPliku()`, `odczytajTabliceZPliku()` functions – unchanged
 - Other library functionalities – unchanged
-

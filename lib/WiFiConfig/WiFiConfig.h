@@ -44,8 +44,8 @@ void trim(String &str);
 void odczytajTabliceZPliku(const char *nazwaPliku);
 int liczbaZajetychMiejscTablicy(WiFiNetwork sieci[], int maxSize); // Podaje ilość zajętych miejsc w tablicy
 void uruchomAP();
-void uaktualnijTablicePlik(const String &ssid, const String &pass); // zapisuje do tablicy a potem do pliku
-void wyczyscPlik(const char *nazwaPliku);                           // Czyści tablicę a potem dane z pliku
+void uaktualnijTablicePlik(const String &ssid, const String &pass, int networkType = 0); // zapisuje do tablicy a potem do pliku
+void wyczyscPlik(const char *nazwaPliku);                                                // Czyści tablicę a potem dane z pliku
 void wyczyscTablice(WiFiNetwork sieci[], int wielkoscTablicy);
 bool initLittleFS(); // Inicjalizacja obsługi plików potszebne do zapizu danych do pliku wywołanie w setup
 void updateMDNS();   // inicjalizacja mDNS do obsługi nazw wywołanie w Loop

@@ -8,6 +8,66 @@ const char *CONFIG_FILE = "/config.json";
 
 bool saveConfig()
 {
+    Serial.println(F("\n┌────────────────────────────────────────┐"));
+    Serial.println(F("│ [ZAPIS] ZAPISUJĘ DO JSON / FLASH       │"));
+    Serial.println(F("└────────────────────────────────────────┘"));
+
+    Serial.println(F("\n[ZAPIS] Wartości do zapisu:"));
+    Serial.print(F("  • config.pingInterval: "));
+    Serial.println(config.pingInterval);
+    Serial.print(F("  • config.failLimit: "));
+    Serial.println(config.failLimit);
+    Serial.print(F("  • config.providerFailureLimit: "));
+    Serial.println(config.providerFailureLimit);
+    Serial.print(F("  • config.autoResetCountersHours: "));
+    Serial.println(config.autoResetCountersHours);
+    Serial.print(F("  • config.maxPingMs: "));
+    Serial.println(config.maxPingMs);
+    Serial.print(F("  • config.lagRetries: "));
+    Serial.println(config.lagRetries);
+    Serial.print(F("  • config.routerOffTime: "));
+    Serial.println(config.routerOffTime);
+    Serial.print(F("  • config.baseBootTime: "));
+    Serial.println(config.baseBootTime);
+    Serial.print(F("  • config.apMaxAttempts: "));
+    Serial.println(config.apMaxAttempts);
+    Serial.print(F("  • config.sleepWindowMs: "));
+    Serial.println(config.sleepWindowMs);
+    Serial.print(F("  • config.awakeWindowMs: "));
+    Serial.println(config.awakeWindowMs);
+    Serial.print(F("  • config.darkMode: "));
+    Serial.println(config.darkMode);
+    Serial.print(F("  • config.ledBrightness: "));
+    Serial.println(config.ledBrightness);
+    Serial.print(F("  • config.host1: "));
+    Serial.println(config.host1);
+    Serial.print(F("  • config.host2: "));
+    Serial.println(config.host2);
+    Serial.print(F("  • config.gatewayOverride: "));
+    Serial.println(config.gatewayOverride);
+    Serial.print(F("  • config.useGatewayOverride: "));
+    Serial.println(config.useGatewayOverride ? "ON" : "OFF");
+    Serial.print(F("  • config.intermittentMode: "));
+    Serial.println(config.intermittentMode ? "ON" : "OFF");
+    Serial.print(F("  • config.watchdogEnabled: "));
+    Serial.println(config.watchdogEnabled ? "ON" : "OFF");
+    Serial.print(F("  • config.noWiFiBackoff: "));
+    Serial.println(config.noWiFiBackoff ? "ON" : "OFF");
+    Serial.print(F("  • config.bootLoopWindowSeconds: "));
+    Serial.println(config.bootLoopWindowSeconds);
+    Serial.print(F("  • config.adminUser: "));
+    Serial.println(config.adminUser);
+    Serial.println(F("\n[ZAPIS] Harmonogram resetów:"));
+    Serial.print(F("  • config.scheduledResetsEnabled: "));
+    Serial.println(config.scheduledResetsEnabled ? "ON" : "OFF");
+    for (int i = 0; i < 5; i++)
+    {
+        Serial.print(F("  • config.scheduledResetTimes["));
+        Serial.print(i);
+        Serial.print(F("]: "));
+        Serial.println(config.scheduledResetTimes[i].length() > 0 ? config.scheduledResetTimes[i] : "(pusty)");
+    }
+
     Serial.println("[CONFIG] Attempting to save config...");
     Serial.print("[CONFIG] ledBrightness=");
     Serial.println(config.ledBrightness);
@@ -92,7 +152,7 @@ bool saveConfig()
     doc["backupNetworkFailCount"] = config.backupNetworkFailCount;
 
     // Tablica czasów scheduled resetów (format HH:MM)
-    JsonArray scheduledTimes = doc["scheduledResetTimes"];
+    JsonArray scheduledTimes = doc.createNestedArray("scheduledResetTimes");
     for (int i = 0; i < 5; i++)
     {
         scheduledTimes.add(config.scheduledResetTimes[i]);
@@ -107,6 +167,10 @@ bool saveConfig()
 
     file.close();
     Serial.println("[CONFIG] Config saved successfully");
+
+    Serial.println(F("\n[ZAPIS] ✅ Dane zostały zserializowane do JSON"));
+    Serial.print(F("  Rozmiar JSON: 1200+ bajtów"));
+    Serial.println(F("\n  Plik: /config.json"));
 
     // Weryfikacja: Sprawdzenie czy plik istnieje
     delay(50);
@@ -131,11 +195,16 @@ bool loadConfig()
     // Małe opóźnienie aby się upewnić że LittleFS jest gotowy
     delay(100);
 
+    Serial.println(F("\n┌────────────────────────────────────────┐"));
+    Serial.println(F("│ [ODCZYT] CZYTAM Z JSON / FLASH         │"));
+    Serial.println(F("└────────────────────────────────────────┘"));
+
     File file = LittleFS.open(CONFIG_FILE, "r");
     if (!file)
     {
         Serial.println("[CONFIG] Config file not found, using defaults");
         Serial.println("[CONFIG] Creating default config file...");
+        Serial.println(F("\n[ODCZYT] UŻYWAM WARTOŚCI DOMYŚLNYCH!"));
         delay(100); // Czekaj zanim spróbujesz zaoszczędzić
         config.pingInterval = 30000;
         config.failLimit = 3;
@@ -230,6 +299,65 @@ bool loadConfig()
     config.host2 = doc["host2"] | "1.1.1.1";
     config.gatewayOverride = doc["gatewayOverride"] | "";
     config.useGatewayOverride = doc["useGatewayOverride"] | false;
+
+    Serial.println(F("\n[ODCZYT] Wczytane wartości z JSON:"));
+    Serial.print(F("  • config.pingInterval: "));
+    Serial.println(config.pingInterval);
+    Serial.print(F("  • config.failLimit: "));
+    Serial.println(config.failLimit);
+    Serial.print(F("  • config.providerFailureLimit: "));
+    Serial.println(config.providerFailureLimit);
+    Serial.print(F("  • config.autoResetCountersHours: "));
+    Serial.println(config.autoResetCountersHours);
+    Serial.print(F("  • config.maxPingMs: "));
+    Serial.println(config.maxPingMs);
+    Serial.print(F("  • config.lagRetries: "));
+    Serial.println(config.lagRetries);
+    Serial.print(F("  • config.routerOffTime: "));
+    Serial.println(config.routerOffTime);
+    Serial.print(F("  • config.baseBootTime: "));
+    Serial.println(config.baseBootTime);
+    Serial.print(F("  • config.apMaxAttempts: "));
+    Serial.println(config.apMaxAttempts);
+    Serial.print(F("  • config.sleepWindowMs: "));
+    Serial.println(config.sleepWindowMs);
+    Serial.print(F("  • config.awakeWindowMs: "));
+    Serial.println(config.awakeWindowMs);
+    Serial.print(F("  • config.noWiFiTimeout: "));
+    Serial.println(config.noWiFiTimeout);
+    Serial.print(F("  • config.darkMode: "));
+    Serial.println(config.darkMode ? "ON" : "OFF");
+    Serial.print(F("  • config.ledBrightness: "));
+    Serial.println(config.ledBrightness);
+    Serial.print(F("  • config.host1: "));
+    Serial.println(config.host1);
+    Serial.print(F("  • config.host2: "));
+    Serial.println(config.host2);
+    Serial.print(F("  • config.gatewayOverride: "));
+    Serial.println(config.gatewayOverride);
+    Serial.print(F("  • config.useGatewayOverride: "));
+    Serial.println(config.useGatewayOverride ? "ON" : "OFF");
+    Serial.print(F("  • config.intermittentMode: "));
+    Serial.println(config.intermittentMode ? "ON" : "OFF");
+    Serial.print(F("  • config.watchdogEnabled: "));
+    Serial.println(config.watchdogEnabled ? "ON" : "OFF");
+    Serial.print(F("  • config.noWiFiBackoff: "));
+    Serial.println(config.noWiFiBackoff ? "ON" : "OFF");
+    Serial.print(F("  • config.bootLoopWindowSeconds: "));
+    Serial.println(config.bootLoopWindowSeconds);
+    Serial.print(F("  • config.adminUser: "));
+    Serial.println(config.adminUser);
+    Serial.println(F("\n[ODCZYT] Harmonogram resetów:"));
+    Serial.print(F("  • config.scheduledResetsEnabled: "));
+    Serial.println(config.scheduledResetsEnabled ? "ON" : "OFF");
+    for (int i = 0; i < 5; i++)
+    {
+        Serial.print(F("  • config.scheduledResetTimes["));
+        Serial.print(i);
+        Serial.print(F("]: "));
+        Serial.println(config.scheduledResetTimes[i].length() > 0 ? config.scheduledResetTimes[i] : "(pusty)");
+    }
+
     config.pinRelay = doc["pinRelay"] | D1;
     config.relayActiveHigh = doc["relayActiveHigh"] | false;
     config.pinRed = doc["pinRed"] | D6;
@@ -304,6 +432,9 @@ bool loadConfig()
     Serial.println(config.darkMode);
     Serial.print("[CONFIG] pingInterval=");
     Serial.println(config.pingInterval);
+
+    Serial.println(F("\n[ODCZYT] ✅ Wszystkie parametry załadowane z Flash"));
+
     return true;
 }
 
