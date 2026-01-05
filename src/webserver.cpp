@@ -30,44 +30,6 @@ void handleListWiFi();         // Zwraca listę zapisanych sieci (JSON)
 
 ESP8266WebServer server(80);
 
-// Statyczne fragmenty sekcji WiFi (mniejsze zużycie RAM i mniej konkatenacji)
-static const char WIFI_SECTION_HEAD[] PROGMEM = R"rawliteral(
-
-        <details class="section accordion">
-            <summary><h2>📶 Sieci WiFi</h2></summary>
-            <div class="accordion-content">
-                <label for="ssid">Nazwa sieci (SSID):</label>
-                <input type="text" id="ssid" name="ssid" placeholder="Wprowadź SSID sieci WiFi">
-                
-                <label for="wifipass">Hasło sieci:</label>
-                <div class="time-group">
-                    <input type="password" id="wifipass" name="pass" placeholder="Hasło WiFi">
-                    <button type="button" onclick="togglePassword('wifipass')">👁️</button>
-                </div>
-                
-                <label for="networkType">Typ sieci: <span class="tooltip">?<span class="tooltiptext">Główna: domyślna sieć. Rezerwowa: włącza się gdy główna zawiedzie (wymaga drugiego routera i przekaźnika).</span></span></label>
-                <select id="networkType" name="networkType">
-                    <option value="0">🟢 Główna (Primary)</option>
-                    <option value="1">🔴 Rezerwowa (Backup)</option>
-                </select>
-                
-                <div style="text-align: center; margin-top: 15px;">
-                    <button type="button" onclick="addWiFiNetwork()" style="padding: 10px 20px; background-color: #007bff;">Zapisz/dodaj sieć WiFi</button>
-                </div>
-                
-                <h4 style="margin-top: 25px;">Zapisane sieci:</h4>
-                <div class="wifi-list" id="wifiList">
-)rawliteral";
-
-static const char WIFI_SECTION_FOOT[] PROGMEM = R"rawliteral(
-                </div>
-
-                <h4 style="margin-top: 25px; margin-bottom: 15px;">⚙️ Konfiguracja sieci rezerwowej (Backup Network)</h4>
-                <div style="background:var(--inp); padding:12px; border:1px solid var(--brd); border-radius:6px; margin-bottom:15px;">
-                    <div class="switch-wrap" style="justify-content: flex-start; margin-bottom:12px;">
-                        <label class="switch">
-)rawliteral";
-
 // ============================================================================
 // FUNKCJE POMOCNICZE DO PARSOWANIA I WALIDACJI KONFIGURACJI
 // ============================================================================
@@ -1277,18 +1239,30 @@ void handleConfig()
     <script>
     console.log("Config page script loaded");
     const SESSION_MS = 300000; // 5 minut
-    const loadTime = Date.now();
+    let sessionEndsAt = Date.now() + SESSION_MS;
+    let warnedExpiring = false;
     let countdownInterval = null;
     
     function updateSessionCountdown() {
-        const elapsed = Date.now() - loadTime;
-        const msLeft = SESSION_MS - elapsed;
+        const msLeft = sessionEndsAt - Date.now();
         
         if (msLeft <= 0) {
             if (countdownInterval) clearInterval(countdownInterval);
             alert('Twoja sesja wygasła. Zostaniesz wylogowany.');
             window.location.href = '/';
             return;
+        }
+
+        // Alert ~20 s przed końcem i pozwól użytkownikowi przedłużyć timer lokalnie
+        if (msLeft <= 20000 && !warnedExpiring) {
+            warnedExpiring = true;
+            const extend = confirm('Sesja wygaśnie za 20 sekund. Przedłużyć o kolejne 5 minut?');
+            if (extend) {
+                sessionEndsAt = Date.now() + SESSION_MS;
+                warnedExpiring = false;
+                updateSessionCountdown();
+                return;
+            }
         }
         
         const totalSec = Math.ceil(msLeft / 1000);
@@ -1303,6 +1277,7 @@ void handleConfig()
     
     function startSessionCountdown() {
         if (!countdownInterval) {
+            sessionEndsAt = Date.now() + SESSION_MS;
             updateSessionCountdown();
             countdownInterval = setInterval(updateSessionCountdown, 1000);
         }
@@ -1539,7 +1514,6 @@ void handleSaveConfig()
 {
     if (!checkAuth())
         return;
-    void handleListWiFi();
 
     if (server.method() != HTTP_POST)
     {
