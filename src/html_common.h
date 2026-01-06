@@ -57,8 +57,10 @@ body {
     margin: auto;
     background: var(--card);
     padding: 20px;
+    padding-bottom: 90px;
     border-radius: 8px;
     box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    position: relative;
 }
 h1 {
     color: var(--fg);
@@ -232,6 +234,14 @@ input:checked + .slider:before {
 .btn-grey { background:#6c757d; color:#fff; }
 .btn-lg { padding:12px 30px; font-size:1.1em; }
 .btn-wide { padding:12px 26px; }
+.fab { position:fixed; bottom:18px; right:max(18px, calc((100vw - 800px)/2 + 18px)); border-radius:999px; padding:12px 18px; box-shadow:0 6px 16px rgba(0,0,0,0.25); display:inline-flex; align-items:center; gap:8px; z-index:9999; opacity:0; pointer-events:none; transform:translateY(10px); transition:opacity .2s, transform .2s; }
+.fab.show { opacity:1; pointer-events:auto; transform:translateY(0); }
+.toast { position:fixed; top:12px; right:12px; z-index:9999; padding:10px 14px; border-radius:6px; box-shadow:0 6px 16px rgba(0,0,0,0.25); border:1px solid var(--brd); opacity:1; transition:opacity .4s ease, transform .4s ease; }
+.toast.hide { opacity:0; transform:translateY(-8px); }
+.toast-success { background:#0b5137; color:#d1fae5; border-color:#34d399; }
+.toast-error { background:#5b1e24; color:#ffd6db; border-color:#e57373; }
+.toast-info { background:var(--card); color:var(--fg); }
+.status-msg { font-weight:600; color:var(--fg); }
 .alert { padding:15px; border-radius:5px; margin-bottom:10px; border: 1px solid transparent; }
 .alert-ok { background-color:var(--success-bg); color:var(--success-fg); border-color:var(--success-border); }
 .alert-bad { background-color:var(--danger-bg); color:var(--danger-fg); border-color:var(--danger-border); }
@@ -425,29 +435,20 @@ function showSaveNotice() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('saved') !== '1') return;
 
-    const toast = document.createElement('div');
-    toast.textContent = '✅ Konfiguracja zapisana';
-    toast.style.position = 'fixed';
-    toast.style.top = '12px';
-    toast.style.right = '12px';
-    toast.style.background = '#0b5137';
-    toast.style.color = '#d1fae5';
-    toast.style.border = '1px solid #34d399';
-    toast.style.padding = '10px 14px';
-    toast.style.borderRadius = '6px';
-    toast.style.boxShadow = '0 6px 16px rgba(0,0,0,0.25)';
-    toast.style.zIndex = '9999';
-    document.body.appendChild(toast);
-
-    setTimeout(() => {
-        toast.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(-8px)';
-        setTimeout(() => toast.remove(), 450);
-    }, 1800);
+    showToast('✅ Konfiguracja zapisana', 'success');
 
     // Usuń parametr z adresu, żeby nie powtarzać powiadomienia
     history.replaceState({}, '', window.location.pathname);
+}
+function showToast(message, type='info') {
+    const toast = document.createElement('div');
+    toast.className = 'toast ' + (type==='success' ? 'toast-success' : type==='error' ? 'toast-error' : 'toast-info');
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('hide');
+        setTimeout(() => toast.remove(), 450);
+    }, 1800);
 }
 function validateSleepTimes() {
     // Walidacja czasów uśpienia: min 5 min, max 60 min

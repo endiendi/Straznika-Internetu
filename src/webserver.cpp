@@ -300,9 +300,9 @@ void handleRoot()
     html += F("<p>Liczba resetów routera: <b>");
     html += totalResets;
     html += F("</b></p>");
-    html += F("<p>Komunikat: <b>");
+    html += F("<p>Komunikat: <span class='status-msg'>");
     html += statusMsg;
-    html += F("</b></p>");
+    html += F("</span></p>");
     html += F("<p>Czas pracy (Uptime): <b>");
     html += (millis() / 1000 / 60);
     html += F(" min</b></p>");
@@ -1198,6 +1198,9 @@ void handleConfig()
             <button type="submit" class="btn-green btn-lg">Zapisz konfigurację</button>
         </div>
 
+        <!-- Pływający przycisk zapisu (pokazywany gdy są niezapisane zmiany) -->
+        <button type="button" id="fabSave" class="fab btn-green" title="Zapisz zmiany">💾 Zapisz</button>
+
         <div class="section">
             <h3>Diagnostyka i Testy</h3>
                 <p>Scenariusze testowe pozwalają sprawdzić reakcję urządzenia.</p>
@@ -1330,6 +1333,29 @@ void handleConfig()
             setGlobalUnit(parseInt(gu.value || '1000'));
         }
     });
+
+    // ========== FAB Save (pływający przycisk zapisu) ==========
+    (function(){
+        const form = document.getElementById('configForm');
+        const fab = document.getElementById('fabSave');
+        if (!form || !fab) return;
+        let dirty = false;
+        let beforeHandlerBound = false;
+
+        function showFab(){ fab.classList.add('show'); }
+        function hideFab(){ fab.classList.remove('show'); }
+        function beforeUnloadHandler(e){ if(!dirty) return; e.preventDefault(); e.returnValue=''; }
+        function markDirty(){
+            if (!dirty){ dirty = true; showFab(); if(!beforeHandlerBound){ window.addEventListener('beforeunload', beforeUnloadHandler); beforeHandlerBound = true; } }
+        }
+        function clearDirty(){ dirty = false; hideFab(); if(beforeHandlerBound){ window.removeEventListener('beforeunload', beforeUnloadHandler); beforeHandlerBound = false; } }
+
+        const fields = form.querySelectorAll('input, select, textarea');
+        fields.forEach(el => { el.addEventListener('input', markDirty); el.addEventListener('change', markDirty); });
+
+        fab.addEventListener('click', () => { if (form.requestSubmit) form.requestSubmit(); else form.submit(); });
+        form.addEventListener('submit', () => { clearDirty(); });
+    })();
 
     // Funkcja do dodawania sieci WiFi
     function addWiFiNetwork() {
