@@ -1045,7 +1045,7 @@ void handleConfig()
     // --- Watchdog Control ---
     html += F(R"rawliteral(
         <details class="section accordion">
-            <summary><h2>🛡️ Kontrola Strażnika (Monitorowanie)</h2></summary>
+            <summary><h2 style="margin:0;">🛡️ Kontrola Strażnika (Monitorowanie)</h2></summary>
             <div class="accordion-content">
                 <div style="background:#1a3a1a; color:#a8f5a8; padding:12px; border-radius:6px; margin-bottom:15px; border:1px solid #4ade80;">
                     <b>⚠️ OSTRZEŻENIE - Dezaktywacja Watchdog:</b><br>
@@ -1066,7 +1066,7 @@ void handleConfig()
     // --- Tryb pracy ---
     html += F(R"rawliteral(
         <details class="section accordion">
-            <summary><h2>⚙️ Tryb pracy</h2></summary>
+            <summary><h2 style="margin:0;">⚙️ Tryb pracy</h2></summary>
             <div class="accordion-content">
                 <div style="background:#3a2f0f; color:#f8e7a1; padding:12px; border-radius:6px; margin-bottom:15px; border:1px solid #c59f2b;">
                     <b>⚠️ WAŻNE - Tryb przerywany:</b><br>
@@ -1131,7 +1131,7 @@ void handleConfig()
     html = F(R"rawliteral(
         <details class="section accordion">
             <summary style="cursor:pointer;" onclick="event.preventDefault(); window.location.href='/wifi';">
-                <h2 style="margin:0;">📶 Sieci WiFi — kliknij, aby otworzyć</h2>
+                <h2 style="margin:0;">📶 Sieci WiFi</h2>
             </summary>
             <div class="accordion-content">
                 <p>Konfiguracja WiFi została przeniesiona do osobnej strony.</p>
@@ -1143,7 +1143,7 @@ void handleConfig()
     server.sendContent(html);
     html = F(R"rawliteral(
         <details class="section accordion">
-            <summary><h2>🔒 Zabezpieczenia (Panel i OTA)</h2></summary>
+            <summary><h2 style="margin:0;">🔒 Zabezpieczenia (Panel i OTA)</h2></summary>
             <div class="accordion-content">
                 <label for="adminUser">Login administratora: <span class="tooltip">?<span class="tooltiptext">Nazwa użytkownika do logowania w panelu.</span></span></label>
                 <input type="text" id="adminUser" name="adminUser" value=")rawliteral");
@@ -1209,7 +1209,7 @@ void handleConfig()
                 <h3 style="margin-top: 30px;">Inne opcje</h3>
                 <div style="display:flex; flex-wrap:wrap; gap:10px;">
                     <a href="/"><button type="button">Powrót do statusu</button></a>
-                    <a href="/wifi" onclick="console.log('Kliknięto przycisk konfiguracji WiFi'); console.log('Przejście do /wifi'); return true;"><button type="button" style="background-color: #6f42c1;">📶 Konfiguracja sieci WiFi</button></a>
+                    <a href="/wifi"><button type="button" style="background-color: #6f42c1;">📶 Konfiguracja sieci WiFi</button></a>
                     <a href="/reset" onclick="return confirm('Czy na pewno chcesz zresetować router?')"><button type="button" style="background-color:#ff6b6b;">Reset routera</button></a>
                     <a href="/reboot" onclick="return confirm('Czy na pewno chcesz zrestartować urządzenie (ESP)?')"><button type="button" style="background-color:#dc3545;">Restart urządzenia (ESP)</button></a>
                     <a href="/downloadlogs"><button type="button" style="background-color: #007bff;">Pobierz logi</button></a>
@@ -1297,20 +1297,6 @@ void handleConfig()
         }
     });
 
-    // Ostrzegaj przed opuszczeniem strony, jeśli są niezapisane dane
-    let isDirty = false;
-    const configForm = document.getElementById('configForm');
-    if (configForm) {
-        configForm.addEventListener('change', () => { isDirty = true; });
-        configForm.addEventListener('submit', () => { isDirty = false; });
-        window.addEventListener('beforeunload', (e) => {
-            if (isDirty) {
-                e.preventDefault();
-                e.returnValue = '';
-            }
-        });
-    }
-    
     // Funkcja do dodawania sieci WiFi
     function addWiFiNetwork() {
         console.log("addWiFiNetwork called");
@@ -1341,9 +1327,6 @@ void handleConfig()
             if (!response.ok) {
                 throw new Error(message || 'Błąd podczas dodawania sieci WiFi.');
             }
-
-            // Resetuj flagę dirty aby uniknąć dialogu beforeunload przy reload
-            isDirty = false;
 
             // Wyczyść pola
             document.getElementById('ssid').value = '';
@@ -1377,7 +1360,6 @@ void handleConfig()
                 throw new Error(message || 'Błąd podczas usuwania sieci WiFi.');
             }
 
-            isDirty = false;
             alert(message || 'Sieć została usunięta.');
             window.location.reload();
         })

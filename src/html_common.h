@@ -474,6 +474,32 @@ function updateBrightness(value) {
     document.getElementById('ledBrightnessVal').textContent = value;
     fetch('/setbrightness?val=' + value);
 }
+
+// Accordion - zamykaj poprzednio otwartą zakładkę gdy otworzy się nowa
+document.addEventListener('DOMContentLoaded', function() {
+    const accordions = document.querySelectorAll('.accordion, .section.accordion');
+    accordions.forEach(accordion => {
+        const summary = accordion.querySelector('summary');
+        if (summary) {
+            summary.addEventListener('click', function() {
+                const wasOpen = accordion.hasAttribute('open');
+                const container = accordion.parentElement || accordion;
+                const allAccordions = container.querySelectorAll('.accordion, .section.accordion');
+                allAccordions.forEach(other => {
+                    if (other !== accordion) {
+                        other.removeAttribute('open');
+                    }
+                });
+                // Przewiń do otwartej sekcji (po krótkim opóźnieniu aby accordion się rozwinął)
+                if (!wasOpen) {
+                    setTimeout(() => {
+                        accordion.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+            });
+        }
+    });
+});
 </script>
 )rawliteral";
 
