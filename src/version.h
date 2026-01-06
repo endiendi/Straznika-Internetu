@@ -3,6 +3,6 @@
 #define VERSION_H
 
 // Zmieniaj przy każdym wydaniu firmware
-#define APP_VERSION "1.1.65"
+#define APP_VERSION "1.1.66"
 
 #endif // VERSION_H

@@ -17,6 +17,15 @@ const char HTML_THEME_STYLES[] PROGMEM = R"rawliteral(
     --btn-hover: #0056b3;
     --inp: #fff;
     --brd: #ccc;
+    --success-bg: #d4edda;
+    --success-fg: #155724;
+    --success-border: #c3e6cb;
+    --danger-bg: #f8d7da;
+    --danger-fg: #721c24;
+    --danger-border: #f5c6cb;
+    --dot-green: #28a745;
+    --dot-red: #dc3545;
+    --dot-blue: #007bff;
 }
 [data-theme='dark'] {
     --bg: #1a1a1a;
@@ -26,6 +35,15 @@ const char HTML_THEME_STYLES[] PROGMEM = R"rawliteral(
     --btn-hover: #0a58ca;
     --inp: #3a3a3a;
     --brd: #444;
+    --success-bg: #23402c;
+    --success-fg: #b2e6c5;
+    --success-border: #2f5c3b;
+    --danger-bg: #3c1f23;
+    --danger-fg: #f2b8be;
+    --danger-border: #5a2a31;
+    --dot-green: #5cd48f;
+    --dot-red: #f08383;
+    --dot-blue: #6db3ff;
 }
 body {
     font-family: Arial, sans-serif;
@@ -194,6 +212,36 @@ input:checked + .slider {
 input:checked + .slider:before {
     transform: translateX(26px);
 }
+.btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+}
+.btn-row.mt-10 {
+    margin-top: 10px;
+}
+.btn-red { background:#dc3545; color:#fff; }
+.btn-pink { background:#ff6b6b; color:#fff; }
+.btn-yellow { background:#ffc107; color:#000; }
+.btn-orange { background:#fd7e14; color:#fff; }
+.btn-amber { background:#ff9800; color:#fff; }
+.btn-green { background:#28a745; color:#fff; }
+.btn-blue { background:#007bff; color:#fff; }
+.btn-cyan { background:#17a2b8; color:#fff; }
+.btn-grey { background:#6c757d; color:#fff; }
+.btn-lg { padding:12px 30px; font-size:1.1em; }
+.btn-wide { padding:12px 26px; }
+.alert { padding:15px; border-radius:5px; margin-bottom:10px; border: 1px solid transparent; }
+.alert-ok { background-color:var(--success-bg); color:var(--success-fg); border-color:var(--success-border); }
+.alert-bad { background-color:var(--danger-bg); color:var(--danger-fg); border-color:var(--danger-border); }
+.dot { height:15px; width:15px; border-radius:50%; display:inline-block; margin-right:5px; transition: box-shadow 0.3s; }
+.dot-green { background:var(--dot-green); }
+.dot-red { background:var(--dot-red); }
+.dot-blue { background:var(--dot-blue); }
+.glow-green { box-shadow:0 0 15px var(--dot-green); }
+.glow-red { box-shadow:0 0 15px var(--dot-red); }
+.glow-blue { box-shadow:0 0 15px var(--dot-blue); }
 .tooltip {
     position: relative;
     display: inline-block;

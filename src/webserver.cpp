@@ -283,11 +283,11 @@ void handleRoot()
 
     if (failCount == 0)
     {
-        html += F("<div style='padding:15px; background-color:#d4edda; color:#155724; border-radius:5px; margin-bottom:10px; border: 1px solid #c3e6cb;'><b>INTERNET DOSTĘPNY</b></div>");
+        html += F("<div class='alert alert-ok'><b>INTERNET DOSTĘPNY</b></div>");
     }
     else
     {
-        html += F("<div style='padding:15px; background-color:#f8d7da; color:#721c24; border-radius:5px; margin-bottom:10px; border: 1px solid #f5c6cb;'><b>PROBLEMY Z SIECIĄ (");
+        html += F("<div class='alert alert-bad'><b>PROBLEMY Z SIECIĄ (");
         html += failCount;
         html += F("/");
         html += config.failLimit;
@@ -377,7 +377,7 @@ void handleRoot()
     html += F("<div class='section'><h2>Akcje</h2>");
     html += F("<div style='display:flex; justify-content:center; gap:12px;'>");
     html += F("<a href='/config'><button>Konfiguracja</button></a>");
-    html += F("<a href='/'><button style='background-color:#6c757d;'>Odśwież</button></a>");
+    html += F("<a href='/'><button class='btn-grey'>Odśwież</button></a>");
     html += F("</div></div>");
 
     // Stopka z wersją oprogramowania (kontener jak w konfiguracji)
@@ -756,7 +756,7 @@ void handleConfig()
 
         <div class="section">
             <h2>Legenda Diod LED</h2>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
     )rawliteral");
 
     bool isBlue = (WiFi.getMode() == WIFI_AP);
@@ -764,21 +764,21 @@ void handleConfig()
     bool isGreen = (!isBlue && !isRed);
 
     html += F("<div style='display:flex; align-items:center; padding: 5px;");
-    html += F("'><span style='height:15px; width:15px; background-color:green; border-radius:50%; display:inline-block; margin-right:5px; transition: box-shadow 0.3s;");
+    html += F("'><span class='dot dot-green");
     if (isGreen)
-        html += F(" box-shadow: 0 0 15px green;");
+        html += F(" glow-green");
     html += F("'></span> <b>Zielona:</b> Internet OK</div>");
 
     html += F("<div style='display:flex; align-items:center; padding: 5px;");
-    html += F("'><span style='height:15px; width:15px; background-color:red; border-radius:50%; display:inline-block; margin-right:5px; transition: box-shadow 0.3s;");
+    html += F("'><span class='dot dot-red");
     if (isRed)
-        html += F(" box-shadow: 0 0 15px red;");
+        html += F(" glow-red");
     html += F("'></span> <b>Czerwona:</b> Awaria / Reset</div>");
 
     html += F("<div style='display:flex; align-items:center; padding: 5px;");
-    html += F("'><span style='height:15px; width:15px; background-color:blue; border-radius:50%; display:inline-block; margin-right:5px; transition: box-shadow 0.3s;");
+    html += F("'><span class='dot dot-blue");
     if (isBlue)
-        html += F(" box-shadow: 0 0 15px blue;");
+        html += F(" glow-blue");
     html += F("'></span> <b>Niebieska:</b> Tryb AP / Oczekiwanie</div>");
 
     html += F(R"rawliteral(
@@ -1168,7 +1168,7 @@ void handleConfig()
             </summary>
             <div class="accordion-content">
                 <p>Konfiguracja WiFi została przeniesiona do osobnej strony.</p>
-                <button type="button" onclick="window.location.href='/wifi';" style="padding: 10px 18px; background-color: #007bff;">Otwórz konfigurację WiFi</button>
+                <button type="button" class="btn-blue btn-wide" onclick="window.location.href='/wifi';">Otwórz konfigurację WiFi</button>
             </div>
         </details>
 
@@ -1195,7 +1195,7 @@ void handleConfig()
         </details>
 
         <div style="text-align: center; margin-top: 20px; margin-bottom: 30px;">
-            <button type="submit" style="padding: 12px 30px; font-size: 1.1em; background-color: #28a745;">Zapisz konfigurację</button>
+            <button type="submit" class="btn-green btn-lg">Zapisz konfigurację</button>
         </div>
 
         <div class="section">
@@ -1232,18 +1232,18 @@ void handleConfig()
     html += F(R"rawliteral(
                 </div>
 
-                <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center;">
-                    <a href="/test/pingfail"><button type="button" style="background-color:#dc3545;">Symuluj awarię Ping</button></a>
-                    <a href="/test/highping"><button type="button" style="background-color:#ffc107;">Symuluj wysoki ping (lag)</button></a>
-                    <a href="/test/nowifi"><button type="button" style="background-color:#fd7e14;">Symuluj brak WiFi (1 min)</button></a>
-                    <a href="/test/stop"><button type="button" style="background-color:#28a745;">✓ Symuluj powrót internetu</button></a>
+                <div class="btn-row">
+                    <a href="/test/pingfail"><button type="button" class="btn-red">Symuluj awarię Ping</button></a>
+                    <a href="/test/highping"><button type="button" class="btn-yellow">Symuluj wysoki ping (lag)</button></a>
+                    <a href="/test/nowifi"><button type="button" class="btn-orange">Symuluj brak WiFi (1 min)</button></a>
+                    <a href="/test/stop"><button type="button" class="btn-green">✓ Symuluj powrót internetu</button></a>
                 </div>
                 
                 <h3 style="margin-top: 30px;">Inne opcje</h3>
-                <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center;">
-                    <a href="/reset" onclick="return confirm('Czy na pewno chcesz zresetować router?')"><button type="button" style="background-color:#ff6b6b;">Reset routera</button></a>
-                    <a href="/reboot" onclick="return confirm('Czy na pewno chcesz zrestartować urządzenie (ESP)?')"><button type="button" style="background-color:#dc3545;">Restart urządzenia (ESP)</button></a>
-                    <a href="/factoryreset" onclick="return confirm('Czy na pewno chcesz przywrócić ustawienia fabryczne? Spowoduje to usunięcie konfiguracji WiFi i wszystkich ustawień.')"><button type="button" style="background-color: #dc3545;">Przywróć ustawienia fabryczne</button></a>
+                <div class="btn-row">
+                    <a href="/reset" onclick="return confirm('Czy na pewno chcesz zresetować router?')"><button type="button" class="btn-pink">Reset routera</button></a>
+                    <a href="/reboot" onclick="return confirm('Czy na pewno chcesz zrestartować urządzenie (ESP)?')"><button type="button" class="btn-red">Restart urządzenia (ESP)</button></a>
+                    <a href="/factoryreset" onclick="return confirm('Czy na pewno chcesz przywrócić ustawienia fabryczne? Spowoduje to usunięcie konfiguracji WiFi i wszystkich ustawień.')"><button type="button" class="btn-red">Przywróć ustawienia fabryczne</button></a>
     )rawliteral");
 
     // Wyświetl przycisk tylko jeśli NIE jesteśmy w trybie AP (czyli jesteśmy połączeni z routerem)
@@ -1254,12 +1254,12 @@ void handleConfig()
     }
 
     html += F(R"rawliteral(
-                    <a href="/downloadlogs"><button type="button" style="background-color: #007bff;">Pobierz logi</button></a>
-                    <a href="/clearresetcounters" onclick="return confirm('Czy na pewno wyczyścić liczniki resetów? To odblokuje ESP do normalnego działania.')"><button type="button" style="background-color: #ff9800;">Wyczyść liczniki resetów</button></a>
-                    <a href="/update"><button type="button" style="background-color: #17a2b8;">Aktualizacja (OTA)</button></a>
+                    <a href="/downloadlogs"><button type="button" class="btn-blue">Pobierz logi</button></a>
+                    <a href="/clearresetcounters" onclick="return confirm('Czy na pewno wyczyścić liczniki resetów? To odblokuje ESP do normalnego działania.')"><button type="button" class="btn-amber">Wyczyść liczniki resetów</button></a>
+                    <a href="/update"><button type="button" class="btn-cyan">Aktualizacja (OTA)</button></a>
                 </div>
-                <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:10px;">
-                    <a href="/logout"><button type="button" style="background-color: #6c757d;">Wyloguj</button></a>
+                <div class="btn-row mt-10">
+                    <a href="/logout"><button type="button" class="btn-grey">Wyloguj</button></a>
                 </div>
             </form>
             <div style="text-align:center; border-top:1px solid var(--brd); padding-top:16px; margin-top:20px; color:#777; font-size:0.9em;">Wersja oprogramowania: <b>)rawliteral");
@@ -1594,7 +1594,7 @@ void handleWiFiPage()
     html += F("</div>");
 
     html += F("<div style='text-align:center; margin-top:20px; display:flex; flex-direction:column; gap:14px; align-items:center;'>");
-    html += F("<button type='button' id='saveWiFi' style='padding:12px 26px; background-color:#007bff;'>💾 Zapisz sieć WiFi</button>");
+    html += F("<button type='button' id='saveWiFi' class='btn-blue btn-wide'>💾 Zapisz sieć WiFi</button>");
 
     html += F("<div class='section' style='width:100%;'>");
     html += F("<h3 style='text-align:center;'>Zapisane sieci WiFi</h3>");
