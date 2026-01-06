@@ -13,18 +13,20 @@
 #include "html_common.h" // Zunifikowany system HTML/CSS/JS
 #include "diag.h"
 #include "version.h"
-#include "config_validation.h" // Walidacja konfiguracji
-#include "html_form_helpers.h" // Helpery do generowania formantów HTML
-void handleFactoryReset();     // Deklaracja funkcji
-void handleReboot();           // Deklaracja funkcji
-void handleSaveBrightness();   // Deklaracja funkcji - zapisuje jasność do Flash
-void handleSimPingFail();      // Deklaracja funkcji symulacji awarii ping
-void handleLoginPage();        // Formularz logowania
-void handleLoginSubmit();      // Weryfikacja logowania
-void handleDownloadLogs();     // Pobranie pliku logów
-void handleWiFiPage();         // Strona konfiguracji WiFi
-void handleSaveBackupConfig(); // Zapis ustawień sieci rezerwowej
-void handleListWiFi();         // Zwraca listę zapisanych sieci (JSON)
+#include "config_validation.h"   // Walidacja konfiguracji
+#include "html_form_helpers.h"   // Helpery do generowania formantów HTML
+void handleFactoryReset();       // Deklaracja funkcji
+void handleReboot();             // Deklaracja funkcji
+void handleSaveBrightness();     // Deklaracja funkcji - zapisuje jasność do Flash
+void handleSimPingFail();        // Deklaracja funkcji symulacji awarii ping
+void handleLoginPage();          // Formularz logowania
+void handleLoginSubmit();        // Weryfikacja logowania
+void handleDownloadLogs();       // Pobranie pliku logów
+void handleClearLogs();          // Czyszczenie logów zdarzeń
+void handleClearResetCounters(); // Czyszczenie liczników resetów
+void handleWiFiPage();           // Strona konfiguracji WiFi
+void handleSaveBackupConfig();   // Zapis ustawień sieci rezerwowej
+void handleListWiFi();           // Zwraca listę zapisanych sieci (JSON)
 
 // Pozostałe funkcje i zmienne (tablica, uaktualnijTablicePlik itp.) są dostępne dzięki #include "WiFiConfig.h"
 
@@ -237,6 +239,7 @@ void setupWebServer()
     server.on("/config", handleConfig);
     server.on("/wifi", handleWiFiPage);
     server.on("/clearlogs", handleClearLogs);
+    server.on("/clearresetcounters", handleClearResetCounters);
     server.on("/saveconfig", HTTP_POST, handleSaveConfig);
     server.on("/addwifi", HTTP_POST, handleAddWiFi);
     server.on("/listwifi", HTTP_GET, handleListWiFi);
@@ -456,6 +459,36 @@ void handleClearLogs()
     File file = LittleFS.open(LOG_FILE, "w");
     if (file)
         file.close(); // Otwarcie w trybie "w" czyści plik
+    redirectTo(server, "/");
+}
+
+void handleClearResetCounters()
+{
+    if (!checkAuth())
+        return;
+
+    // Wyczyść wszystkie liczniki resetów
+    config.resetDefault = 0;
+    config.resetWdt = 0;
+    config.resetException = 0;
+    config.resetSoftWdt = 0;
+    config.resetSoft = 0;
+    config.resetDeepSleep = 0;
+    config.resetExt = 0;
+    config.routerResetCount = 0;
+    config.totalResetsEver = 0;
+
+    // Zapisz do config.json
+    if (saveConfig())
+    {
+        logEvent("LICZNIKI RESETOW WYCZYSZCZONE");
+        Serial.println(F("✅ [CLEAR_COUNTERS] Wszystkie liczniki resetów wyczyszczone"));
+    }
+    else
+    {
+        Serial.println(F("❌ [CLEAR_COUNTERS] Błąd przy zapisie konfiguracji"));
+    }
+
     redirectTo(server, "/");
 }
 
@@ -1199,7 +1232,7 @@ void handleConfig()
     html += F(R"rawliteral(
                 </div>
 
-                <div style="display:flex; flex-wrap:wrap; gap:10px;">
+                <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center;">
                     <a href="/test/pingfail"><button type="button" style="background-color:#dc3545;">Symuluj awarię Ping</button></a>
                     <a href="/test/highping"><button type="button" style="background-color:#ffc107;">Symuluj wysoki ping (lag)</button></a>
                     <a href="/test/nowifi"><button type="button" style="background-color:#fd7e14;">Symuluj brak WiFi (1 min)</button></a>
@@ -1207,24 +1240,25 @@ void handleConfig()
                 </div>
                 
                 <h3 style="margin-top: 30px;">Inne opcje</h3>
-                <div style="display:flex; flex-wrap:wrap; gap:10px;">
-                    <a href="/"><button type="button">Powrót do statusu</button></a>
-                    <a href="/wifi"><button type="button" style="background-color: #6f42c1;">📶 Konfiguracja sieci WiFi</button></a>
+                <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center;">
                     <a href="/reset" onclick="return confirm('Czy na pewno chcesz zresetować router?')"><button type="button" style="background-color:#ff6b6b;">Reset routera</button></a>
                     <a href="/reboot" onclick="return confirm('Czy na pewno chcesz zrestartować urządzenie (ESP)?')"><button type="button" style="background-color:#dc3545;">Restart urządzenia (ESP)</button></a>
-                    <a href="/downloadlogs"><button type="button" style="background-color: #007bff;">Pobierz logi</button></a>
-                    <a href="/clearlogs"><button type="button" style="background-color: #ffc107; color: black;">Wyczyść logi</button></a>
-                    <a href="/update"><button type="button" style="background-color: #17a2b8;">Aktualizacja (OTA)</button></a>
-                    <a href="/factoryreset" onclick="return confirm('Czy na pewno chcesz przywrócić ustawienia fabryczne? Spowoduje to usunięcie konfiguracji WiFi i wszystkich ustawień.')"><button type="button" style="background-color: #dc3545;">Przywróć ustawienia fabryczne</button></a>)rawliteral");
+                    <a href="/factoryreset" onclick="return confirm('Czy na pewno chcesz przywrócić ustawienia fabryczne? Spowoduje to usunięcie konfiguracji WiFi i wszystkich ustawień.')"><button type="button" style="background-color: #dc3545;">Przywróć ustawienia fabryczne</button></a>
+    )rawliteral");
 
     // Wyświetl przycisk tylko jeśli NIE jesteśmy w trybie AP (czyli jesteśmy połączeni z routerem)
     if (WiFi.getMode() != WIFI_AP)
     {
         html += F(R"rawliteral(
-                <a href="/manualconfig"><button type="button">Ręczny tryb konfiguracyjny (Wymuś AP)</button></a>)rawliteral");
+                    <a href="/manualconfig"><button type="button">Ręczny tryb konfiguracyjny (Wymuś AP)</button></a>)rawliteral");
     }
 
     html += F(R"rawliteral(
+                    <a href="/downloadlogs"><button type="button" style="background-color: #007bff;">Pobierz logi</button></a>
+                    <a href="/clearresetcounters" onclick="return confirm('Czy na pewno wyczyścić liczniki resetów? To odblokuje ESP do normalnego działania.')"><button type="button" style="background-color: #ff9800;">Wyczyść liczniki resetów</button></a>
+                    <a href="/update"><button type="button" style="background-color: #17a2b8;">Aktualizacja (OTA)</button></a>
+                </div>
+                <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:10px;">
                     <a href="/logout"><button type="button" style="background-color: #6c757d;">Wyloguj</button></a>
                 </div>
             </form>

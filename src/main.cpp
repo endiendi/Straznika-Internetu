@@ -119,6 +119,28 @@ static time_t estimateNowFromLastSync()
   return 0;
 }
 
+static bool syncTimeOnStartup(unsigned long timeoutMs = 5000)
+{
+  unsigned long start = millis();
+  while (millis() - start < timeoutMs)
+  {
+    time_t now = time(nullptr);
+    if (now > 1600000000)
+    {
+      config.lastNtpSync = now;
+      config.ntpSyncMillis = millis();
+      ntpSyncLost = false;
+      estimatedOfflineTime = now;
+      logEvent("NTP OK (startup): " + formatEpochTime(now));
+      return true;
+    }
+    delay(200);
+  }
+
+  logEvent("NTP niedostepne przy starcie - logi w trybie UNSYNC");
+  return false;
+}
+
 static void recordResetDiagnostics()
 {
   rst_info *info = ESP.getResetInfoPtr();
@@ -130,26 +152,34 @@ static void recordResetDiagnostics()
   {
   case REASON_DEFAULT_RST:
     config.resetDefault++;
+    DIAG_PRINTF("[RESET_COUNTER] resetDefault++ → %d\n", config.resetDefault);
     break;
   case REASON_WDT_RST:
     config.resetWdt++;
+    DIAG_PRINTF("[RESET_COUNTER] resetWdt++ → %d\n", config.resetWdt);
     break;
   case REASON_EXCEPTION_RST:
     config.resetException++;
+    DIAG_PRINTF("[RESET_COUNTER] resetException++ → %d\n", config.resetException);
     break;
   case REASON_SOFT_WDT_RST:
     config.resetSoftWdt++;
+    DIAG_PRINTF("[RESET_COUNTER] resetSoftWdt++ → %d\n", config.resetSoftWdt);
     break;
   case REASON_SOFT_RESTART:
     config.resetSoft++;
+    DIAG_PRINTF("[RESET_COUNTER] resetSoft++ → %d\n", config.resetSoft);
     break;
   case REASON_DEEP_SLEEP_AWAKE:
     config.resetDeepSleep++;
+    DIAG_PRINTF("[RESET_COUNTER] resetDeepSleep++ → %d\n", config.resetDeepSleep);
     break;
   case REASON_EXT_SYS_RST:
     config.resetExt++;
+    DIAG_PRINTF("[RESET_COUNTER] resetExt++ → %d\n", config.resetExt);
     break;
   default:
+    DIAG_PRINTF("[RESET_COUNTER] resetUnknown (reason=%d)\n", reason);
     break;
   }
 
@@ -230,16 +260,35 @@ void logEvent(String msg)
 
   String timestamp;
   time_t now = time(nullptr);
+  if (now <= 1600000000)
+  {
+    // Spróbuj oszacować czas z ostatniego NTP + millis, jeśli brak bieżącego NTP
+    time_t estimated = estimateNowFromLastSync();
+    if (estimated > 0)
+    {
+      now = estimated;
+    }
+  }
+
   if (now > 1600000000)
-  { // Jeśli czas jest poprawny (np. > rok 2020)
+  {
+    // Mamy zsynchronizowany (lub oszacowany) czas kalendarzowy
     struct tm *timeinfo = localtime(&now);
-    char timeStr[16];
-    sprintf(timeStr, "[%02d:%02d:%02d] ", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-    timestamp = String(timeStr);
+    char timeStr[32];
+    if (timeinfo)
+    {
+      strftime(timeStr, sizeof(timeStr), "[%Y-%m-%d %H:%M:%S] ", timeinfo);
+      timestamp = String(timeStr);
+    }
+    else
+    {
+      timestamp = "[czas_nieznany] ";
+    }
   }
   else
   {
-    timestamp = "[" + String(millis() / 1000) + "s] ";
+    // Brak NTP: zapisz czas względny i oznacz brak synchronizacji
+    timestamp = "[~" + String(millis() / 1000) + "s UNSYNC] ";
   }
 
   content += timestamp + msg + "\n";
@@ -703,6 +752,7 @@ void setup()
   else
   {
     // PolaczZWiFi już zalogował szczegóły i uruchomił mDNS
+    syncTimeOnStartup();
     lastPingTime = 0; // Wymuś ping natychmiast aby ustawić prawidłową diodę
   }
 
